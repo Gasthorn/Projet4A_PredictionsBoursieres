@@ -37,12 +37,7 @@ layout = html.Div(className="actions-page", children=[
             dcc.Dropdown(
                 id='period-dropdown',
                 options=[
-                    """{'label': '1 jour', 'value': '1d'},
-                    {'label': '2 jours', 'value': '2d'},
-                    {'label': '3 jours', 'value': '3d'},
-                    {'label': '5 jours', 'value': '5d'},
-                    {'label': '1 semaine', 'value': '1wk'},
-                    {'label': '2 semaines', 'value': '2wk'},"""
+                    
                     {'label': '1 mois', 'value': '1mo'},
                     {'label': '2 mois', 'value': '2mo'},
                     {'label': '3 mois', 'value': '3mo'},
