@@ -37,17 +37,24 @@ layout = html.Div(className="actions-page", children=[
             dcc.Dropdown(
                 id='period-dropdown',
                 options=[
-                    {'label': '1 jour', 'value': '1d'},
+                    """{'label': '1 jour', 'value': '1d'},
                     {'label': '2 jours', 'value': '2d'},
                     {'label': '3 jours', 'value': '3d'},
                     {'label': '5 jours', 'value': '5d'},
                     {'label': '1 semaine', 'value': '1wk'},
-                    {'label': '2 semaines', 'value': '2wk'},
+                    {'label': '2 semaines', 'value': '2wk'},"""
                     {'label': '1 mois', 'value': '1mo'},
                     {'label': '2 mois', 'value': '2mo'},
                     {'label': '3 mois', 'value': '3mo'},
+                    {'label': '6 mois', 'value': '6mo'},
+                    {'label': '9 mois', 'value': '9mo'},
+                    {'label': '1 an', 'value': '1y'},
+                    {'label': '2 ans', 'value': '2y'},
+                    {'label': '3 ans', 'value': '3y'},
+                    {'label': '5 ans', 'value': '5y'},
+
                 ],
-                value='1mo',
+                value='6mo',
                 className="lux-dropdown"
             ),
         ]),
@@ -68,11 +75,10 @@ layout = html.Div(className="actions-page", children=[
     ])
 ])
 def get_interval(period):
-    # Périodes "longues" : tout ce qui contient "wk" ou "mo"
-    if "mo" in period:
-        return "1d"
+    if "y" in period:
+        return "5d"
     else:
-        return "1h"
+        return "1d"
     
 # === CALLBACKS ===
 @callback(
@@ -86,12 +92,16 @@ def get_interval(period):
 def update_graph_and_metrics(n, symbol, period):
     # Couleurs de remplissage des candelsticks
     color_palette = [
-        ((0, 255, 0), (255, 0, 0)),       # vert / rouge
-        ((184, 115, 51), (255, 215, 0)),  # marron / or
-        ((0, 255, 255), (255, 0, 255)),   # cyan / magenta
-        ((255, 165, 0), (128, 0, 128)),   # orange / violet
-        ((0, 206, 209), (255, 105, 180)), # turquoise / rose
-        ((139, 69, 19), (240, 230, 140)), # brun / kaki
+        ((0, 255, 0), (0, 100, 0)),         # vert vif / vert très foncé
+        ((0, 120, 255), (0, 40, 120)),      # bleu vif / bleu très foncé
+        ((255, 165, 0), (140, 70, 0)),      # orange vif / orange foncé marqué
+        ((200, 0, 200), (100, 0, 100)),       # violet vif / violet très foncé
+        ((255, 20, 147), (120, 0, 70)),     # rose vif / rose foncé marqué
+        ((0, 206, 209), (0, 80, 80)),       # turquoise vif / turquoise foncé
+        ((255, 255, 0), (150, 150, 0)),     # jaune vif / jaune foncé marqué
+        ((255, 69, 0), (140, 35, 0)),       # orange rouge vif / orange rouge foncé
+        ((75, 0, 130), (30, 0, 50)),        # indigo vif / indigo très foncé
+        ((60, 179, 113), (20, 90, 50)),     # vert menthe vif / vert menthe foncé
     ]
 
     interval=get_interval(period)
@@ -101,7 +111,7 @@ def update_graph_and_metrics(n, symbol, period):
             html.Div(className="metric-item metric-header", children=[
                 html.Span("Ticker", className="metric-label"),
                 html.Span("Prix Actuel", className="metric-label"),
-                html.Span("Variation", className="metric-label"),
+                html.Span("Variation (1j)", className="metric-label"),
             ])
         ]
 
