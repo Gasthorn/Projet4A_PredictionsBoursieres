@@ -74,7 +74,11 @@ layout = html.Div([
                     ]),
                     html.Div(className="info-line", children=[
                         html.I(className="fas fa-location-dot"),
-                        html.Span("ENSIM, Le Mans, France")
+                        html.Span([
+                            "ENSIM, 1 Rue Aristote", 
+                            html.Br(), 
+                            "72000 Le Mans, France"
+                        ])
                     ]),
 
                     html.Div(className="social-icons", children=[
@@ -89,7 +93,7 @@ layout = html.Div([
             # --- CARTE GOOGLE MAPS ---
             html.Div(className="map-container", children=[
                 html.Iframe(
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2671.877541649405!2d0.16224861564635194!3d48.00942597921493!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47e2886a4fa0b1ad%3A0xf8aeb2cc9cd5f2e!2sENSIM%20Le%20Mans!5e0!3m2!1sfr!2sfr!4v1715610936412!5m2!1sfr!2sfr",
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2671.877541649405!2d0.15757102527180605!3d48.01906203587245!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x47e2886a4fa0b1ad%3A0xf8aeb2cc9cd5f2e!2s1+Rue+Aristote,+72000+Le+Mans!5e0!3m2!1sfr!2sfr!4v1715610936412!5m2!1sfr!2sfr",
                     width="100%",
                     height="100%",
                     style={"border": "0", "borderRadius": "16px"}
