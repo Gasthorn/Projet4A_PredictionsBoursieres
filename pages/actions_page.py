@@ -50,7 +50,7 @@ layout = html.Div(className="actions-page", children=[
 
                 ],
                 value='6mo',
-                className="lux-dropdown"
+                className="lux-dropdown scrollable-dropdown"
             ),
         ]),
 
