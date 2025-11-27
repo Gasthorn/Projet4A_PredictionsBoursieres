@@ -598,6 +598,7 @@ body {
 }
 
 .control-panel:hover::before, .metrics-panel:hover::before { opacity: 1; }
+
 .control-panel:hover, .metrics-panel:hover {
   transform: translateY(-10px) scale(1.02);
   box-shadow: 
