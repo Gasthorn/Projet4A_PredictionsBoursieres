@@ -104,16 +104,17 @@ def control_layout(pathname):
 )
 def update_ticker(n):
     data = fetch_ticker_data()
-    items = [
+    items = [  
         html.Div(className="ticker-item", children=[
             html.Span(d["label"]),
             html.Span(className="ticker-value", children=d["value"]),
             html.Span(className=f"ticker-change {d['class']}", children=d["change"])
-        ]) for d in data
+        ])
+        for symbol, d in zip(TICKERS.keys(), data)
     ]
     ticker_set = html.Div(className="ticker-set", children=items)
-    return [ticker_set, ticker_set]  # 2x → boucle parfaite
+    return [ticker_set, ticker_set]  # 2x → boucle parfaite 
 
 # === LANCEMENT ===
 if __name__ == "__main__":
-    app.run(debug=True, port=8051)
+    app.run( port=7860, debug=True)
