@@ -1,18 +1,44 @@
-from dash import html, dcc, Input, Output, callback, register_page
-import yfinance as yf
+from dash import html, dcc, Input, Output, callback, register_page,no_update
 import plotly.graph_objects as go
 import pandas as pd
 
 register_page(__name__, path="/actions_page", name="Actions")
 
+df_report = pd.read_csv("Data/data_report.csv")
+df = pd.read_csv("Data/ALL_FEATURES.csv", parse_dates=["date"])
+available_symbols = sorted(df["symbol"].unique())
+
+def filter_period(df, period):
+    """Filtre df selon la période comme yfinance."""
+    days_map = {
+        "1mo": 30,
+        "2mo": 60,
+        "3mo": 90,
+        "6mo": 182,
+        "9mo": 273,
+        "1y": 365,
+        "2y": 730,
+        "3y": 1095,
+        "5y": 1825,
+    }
+    if period not in days_map:
+        return df
+
+    cutoff = pd.Timestamp.today() - pd.Timedelta(days=days_map[period])
+    return df[df["date"] >= cutoff]
+
 # === LAYOUT ===
+dropdown_options = [
+    {"label": symbol, "value": symbol}
+    for symbol in available_symbols
+]
+
 layout = html.Div(className="actions-page", children=[
     # Titre animé
     html.Div(className="page-title", children=[
         html.H1("Analyse d'Actifs en Temps Réel", className="glow-title"),
         html.Div(className="neon-underline")
     ]),
-
     # Conteneur principal
     html.Div(className="actions-container", children=[
         # === PANNEAU DE CONTRÔLE ===
@@ -20,15 +46,7 @@ layout = html.Div(className="actions-page", children=[
             html.H3("Sélection d'Actif", className="panel-title"),
             dcc.Dropdown(
                 id='stock-dropdown',
-                options=[
-                    {'label': 'Apple (AAPL)', 'value': 'AAPL'},
-                    {'label': 'Microsoft (MSFT)', 'value': 'MSFT'},
-                    {'label': 'Tesla (TSLA)', 'value': 'TSLA'},
-                    {'label': 'Amazon (AMZN)', 'value': 'AMZN'},
-                    {'label': 'NVIDIA (NVDA)', 'value': 'NVDA'},
-                    {'label': 'Bitcoin (BTC)', 'value': 'BTC-USD'},
-                    {'label': 'Ethereum (ETH)', 'value': 'ETH-USD'},
-                ],
+                options=dropdown_options,
                 value='AAPL',
                 multi = True,
                 className="lux-dropdown scrollable-dropdown"
@@ -37,7 +55,6 @@ layout = html.Div(className="actions-page", children=[
             dcc.Dropdown(
                 id='period-dropdown',
                 options=[
-                    
                     {'label': '1 mois', 'value': '1mo'},
                     {'label': '2 mois', 'value': '2mo'},
                     {'label': '3 mois', 'value': '3mo'},
@@ -51,7 +68,7 @@ layout = html.Div(className="actions-page", children=[
                 ],
                 value='6mo',
                 className="lux-dropdown scrollable-dropdown"
-            ),
+            )
         ]),
 
         # === MÉTRIQUES EN TEMPS RÉEL ===
@@ -67,6 +84,14 @@ layout = html.Div(className="actions-page", children=[
             # INTERVAL UNIQUE
             dcc.Interval(id='interval-graph-update', interval=60*1000, n_intervals=0)
         ]),
+
+        # === DONNEES AVANCEES ===
+        html.Div(className="advanced-control-panel",children=[
+            html.H3("Données Avancées", className="panel-title"),
+            dcc.Loading(html.Div(id="advanced-metrics-grid", className="metrics-grid"),
+                        type="cube"
+                        )
+        ])
     ])
 ])
 def get_interval(period):
@@ -75,110 +100,151 @@ def get_interval(period):
     else:
         return "1d"
     
-# === CALLBACKS ===
+# === CALLBACKS ==
 @callback(
     Output('stock-graph', 'figure'),
     Output('live-metrics', 'children'),
     Input('interval-graph-update', 'n_intervals'),
     Input('stock-dropdown', 'value'),
-    Input('period-dropdown', 'value')
+    Input('period-dropdown', 'value'),
 )
-
 def update_graph_and_metrics(n, symbol, period):
-    # Couleurs de remplissage des candelsticks
+
     color_palette = [
-        ((0, 255, 0), (0, 100, 0)),         # vert vif / vert très foncé
-        ((0, 120, 255), (0, 40, 120)),      # bleu vif / bleu très foncé
-        ((255, 165, 0), (140, 70, 0)),      # orange vif / orange foncé marqué
-        ((200, 0, 200), (100, 0, 100)),       # violet vif / violet très foncé
-        ((255, 20, 147), (120, 0, 70)),     # rose vif / rose foncé marqué
-        ((0, 206, 209), (0, 80, 80)),       # turquoise vif / turquoise foncé
-        ((255, 255, 0), (150, 150, 0)),     # jaune vif / jaune foncé marqué
-        ((255, 69, 0), (140, 35, 0)),       # orange rouge vif / orange rouge foncé
-        ((75, 0, 130), (30, 0, 50)),        # indigo vif / indigo très foncé
-        ((60, 179, 113), (20, 90, 50)),     # vert menthe vif / vert menthe foncé
+        ((0, 255, 0), (0, 100, 0)),
+        ((0, 120, 255), (0, 40, 120)),
+        ((255, 165, 0), (140, 70, 0)),
+        ((200, 0, 200), (100, 0, 100)),
+        ((255, 20, 147), (120, 0, 70)),
+        ((0, 206, 209), (0, 80, 80)),
+        ((255, 255, 0), (150, 150, 0)),
+        ((255, 69, 0), (140, 35, 0)),
+        ((75, 0, 130), (30, 0, 50)),
+        ((60, 179, 113), (20, 90, 50)),
     ]
 
-    interval=get_interval(period)
-    try:
-        fig = go.Figure()
-        metrics = [
-            html.Div(className="metric-item metric-header", children=[
-                html.Span("Ticker", className="metric-label"),
-                html.Span("Prix Actuel", className="metric-label"),
-                html.Span("Variation (1j)", className="metric-label"),
+    fig = go.Figure()
+    metrics = [
+        html.Div(className="metric-item metric-header", children=[
+            html.Span("Ticker"),
+            html.Span("Prix Actuel"),
+            html.Span("Variation (1j)")
+        ])
+    ]
+
+    if isinstance(symbol, str):
+        symbols = [symbol]
+    elif isinstance(symbol, list):
+        symbols = [s for s in symbol if s]
+    else:
+        symbols = []
+
+    if not symbols:
+        fig.add_annotation(text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False)
+        return fig, [html.Div("Aucune action sélectionnée", className="metric-item error")]
+
+    for i, ticker_symbol in enumerate(symbols):
+
+        # Filtrer les données pour ce ticker
+        hist = df[df["symbol"] == ticker_symbol].sort_values("date").copy()
+
+        if hist.empty:
+            continue
+
+        # Filtrage par période
+        hist = filter_period(hist, period)
+
+        if hist.empty:
+            continue
+
+        up_rgb, down_rgb = color_palette[i % len(color_palette)]
+        up_line = f"rgb({up_rgb[0]},{up_rgb[1]},{up_rgb[2]})"
+        down_line = f"rgb({down_rgb[0]},{down_rgb[1]},{down_rgb[2]})"
+        up_fill = f"rgba({up_rgb[0]},{up_rgb[1]},{up_rgb[2]},0.6)"
+        down_fill = f"rgba({down_rgb[0]},{down_rgb[1]},{down_rgb[2]},0.6)"
+
+        # Ajout du graphique
+        fig.add_trace(go.Candlestick(
+            x=hist["date"],
+            open=hist["Open"],
+            high=hist["High"],
+            low=hist["Low"],
+            close=hist["Close"],
+            name=ticker_symbol,
+            increasing_line_color=up_line,
+            decreasing_line_color=down_line,
+            increasing_fillcolor=up_fill,
+            decreasing_fillcolor=down_fill
+        ))
+
+        # Métriques
+        current = hist["Close"].iloc[-1]
+        prev = hist["Close"].iloc[-2] if len(hist) > 1 else current
+        change = (current - prev) / prev * 100 if prev != 0 else 0
+
+        metrics.append(html.Div(className="metric-item", children=[
+            html.Span(ticker_symbol),
+            html.Span(f"${current:,.2f}"),
+            html.Span(f"{'+' if change > 0 else ''}{change:.2f}%",
+                      className=f"metric-change {'up' if change > 0 else 'down'}")
+        ]))
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e6ffff"),
+        xaxis=dict(showgrid=True, gridcolor="rgba(0,240,255,0.1)"),
+        yaxis=dict(showgrid=True, gridcolor="rgba(0,240,255,0.1)"),
+        margin=dict(l=40, r=40, t=40, b=40),
+        height=500
+    )
+
+    return fig, metrics
+
+@callback(
+    Output("advanced-metrics-grid", "children"),
+    Input("stock-dropdown", "value"),
+)
+def update_advanced_metrics(symbols):
+    if isinstance(symbols, str):
+        symbols = [symbols]
+    elif isinstance(symbols, list):
+        symbols = [s for s in symbols if s]
+    else:
+        symbols = []
+
+    if not symbols:
+        return [html.Div("Aucun ticker sélectionné", className="metric-item error")]
+
+    metrics = [
+        html.Div(className="metric-item metric-header", children=[
+            html.Span("Ticker"),
+            html.Span("Volatilité 10j"),
+            html.Span("Retour quotidien"),
+            html.Span("Overnight Gap")
+        ])
+    ]
+
+    for ticker in symbols:
+        hist = df[df["symbol"] == ticker].sort_values("date")
+        if hist.empty:
+            continue
+
+        last_row = hist.iloc[-1]
+
+        # Forcer conversion float si jamais
+        vol = float(last_row["volatility_10"])
+        ret = float(last_row["daily_return"])
+        gap = float(last_row["overnight_gap"])
+
+        metrics.append(
+            html.Div(className="metric-item", children=[
+                html.Span(ticker, className="metric-title"),
+                html.Span(f"{vol:.4f}", className=f"metric-change {'up' if vol > 0 else 'down'}"),
+                html.Span(f"{ret:.4f}", className=f"metric-change {'up' if ret > 0 else 'down'}"),
+                html.Span(f"{gap:.4f}", className=f"metric-change {'up' if gap > 0 else 'down'}"),
             ])
-        ]
-
-        if isinstance(symbol, str):
-            symbols = [symbol]  #transformer la chaîne en liste
-        elif isinstance(symbol, list):
-            symbols = [s for s in symbol if s]  # filtrer les valeurs vides
-        else:
-            symbols = []
-
-        if not symbols:
-            fig.add_annotation(text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False)
-            return fig, [html.Div("Aucune action sélectionnée", className="metric-item error")]
-        
-        for i,ticker_symbol in enumerate(symbols):
-            try :
-                up_rgb, down_rgb = color_palette[i % len(color_palette)]
-                # Couleurs différentes pour chaque action différente
-                up_line = f"rgb({up_rgb[0]},{up_rgb[1]},{up_rgb[2]})"
-                down_line = f"rgb({down_rgb[0]},{down_rgb[1]},{down_rgb[2]})"
-
-                # Couleurs légèrement assombries pour le remplissage
-                up_fill = f"rgba({up_rgb[0]},{up_rgb[1]},{up_rgb[2]},0.6)"
-                down_fill = f"rgba({down_rgb[0]},{down_rgb[1]},{down_rgb[2]},0.6)"
-
-                ticker = yf.Ticker(ticker_symbol)
-                hist = ticker.history(period=period, interval=interval)
-                
-                if hist.empty:
-                    continue 
-
-                # Graphique
-                fig.add_trace(go.Candlestick(
-                    x=hist.index,
-                    open=hist['Open'], high=hist['High'],
-                    low=hist['Low'], close=hist['Close'],
-                    name=ticker_symbol,
-                    increasing_line_color=up_line,
-                    decreasing_line_color=down_line,
-                    increasing_fillcolor=up_fill,
-                    decreasing_fillcolor=down_fill
-                ))
-
-                # Métriques
-                current = hist['Close'].iloc[-1]
-                prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
-                change = (current - prev) / prev * 100 if prev != 0 else 0
-                metrics.append(html.Div(className="metric-item", children=[
-                    html.Span(ticker_symbol, className="metric-title"),
-                    html.Span(f"${current:,.2f}", className="metric-value"),
-                    html.Span(f"{'+' if change > 0 else ''}{change:.2f}%", 
-                              className=f"metric-change {'up' if change > 0 else 'down'}")
-                ]))
-            except Exception:
-                continue
-        
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#e6ffff"),
-            xaxis=dict(showgrid=True, gridcolor="rgba(0,240,255,0.1)"),
-            yaxis=dict(showgrid=True, gridcolor="rgba(0,240,255,0.1)"),
-            margin=dict(l=40, r=40, t=40, b=40),
-            height=500
-            
         )
-        fig.update_xaxes(autorange=True)
-        fig.update_yaxes(autorange=True)
-        return fig, metrics
 
-    except Exception as e:
-        fig = go.Figure().add_annotation(text="Erreur de chargement", x=0.5, y=0.5, showarrow=False)
-        metrics = [html.Div("Erreur API", className="metric-item error")]
-        return fig, metrics
+    return metrics

@@ -66,7 +66,7 @@ body {
   top: 0; left: 0; right: 0;
   height: 44px;
   overflow: hidden;
-  z-index: 3000;
+  z-index: 1000;
   pointer-events: none;
   background: linear-gradient(90deg, rgba(0,10,18,0.8), rgba(0,10,18,0.6));
   backdrop-filter: blur(8px);
@@ -587,6 +587,18 @@ body {
   overflow: hidden;
 }
 
+.control-panel{
+  height: 400px
+}
+
+.control-panel:has(#stock-dropdown .Select.is-open){
+  height : 500px
+}
+
+.control-panel:has(#period-dropdown .Select.is-open){
+  height : 600px
+}
+
 .control-panel::before, .metrics-panel::before {
   content: '';
   position: absolute;
@@ -606,6 +618,23 @@ body {
     0 0 60px rgba(0,240,255,0.3),
     inset 0 1px 0 rgba(255,255,255,0.12);
   border-color: rgba(0,240,255,0.45);
+}
+
+.advanced-control-panel{
+  background: linear-gradient(145deg, rgba(10,25,50,0.75), rgba(5,15,35,0.6));
+  border-radius: 24px;
+  border: 1.5px solid rgba(0,240,255,0.22);
+  padding: 36px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 
+    0 25px 70px rgba(0,0,0,0.6),
+    0 0 40px rgba(0,240,255,0.15),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  position: relative;
+  overflow: hidden;
+  width : 1100px;
 }
 
 /* Titre des panneaux */
@@ -639,8 +668,7 @@ body {
   font-weight: 600;
   box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
   transition: all 0.35s ease;
-  max-height: 320px;
-  overflow-y: auto;
+  width: auto; /* largeur automatique selon le contenu */
 }
 
 .lux-dropdown:focus {
@@ -650,11 +678,17 @@ body {
 }
 
 .scrollable-dropdown .Select-menu-outer {
+  position: absolute;       /* important : faire flotter au-dessus du parent */
+  top: 100%;                /* juste en dessous de l’input */
+  left: 0;
+  z-index: 9999;            /* s’assure que c’est au-dessus */
+  min-width: 220px;         /* largeur minimale */
+  max-width: 600px;         /* largeur maximale si tu veux */
+  max-height: 400px;        /* hauteur maximale avant scroll */
+  overflow-y: auto;         /* permet de scroller si beaucoup d’options */
   background: rgba(5,15,35,0.98) !important;
   border: 2px solid rgba(0,240,255,0.28) !important;
   border-radius: 16px;
-  max-height: 300px;
-  overflow-y: auto;
   box-shadow: 0 15px 40px rgba(0,0,0,0.5);
 }
 
