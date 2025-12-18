@@ -528,7 +528,7 @@ body {
 
 /* ====================== PAGE ACTIONS - TradeLux FUTURISTE LUXE ====================== */
 .actions-page {
-  padding: 140px 40px 100px;
+  padding: 60px 40px 100px;
   width: 100%;
   max-width: none;   
   margin: 0;         
@@ -770,6 +770,17 @@ body {
   width: auto; /* largeur automatique selon le contenu */
 }
 
+.lux-dropdown .Select-control {
+  background: rgba(5,15,35,0.9) !important;
+  color: #00f0ff !important;
+  border: 2px solid rgba(0,240,255,0.28) !important;
+  border-radius: 16px;
+}
+
+.lux-dropdown .Select-control .Select-value .Select-value-label {
+  color: #e6ffff !important;  /* couleur du texte sélectionné */
+}
+
 .lux-dropdown:focus {
   outline: none;
   border-color: var(--accent) !important;
@@ -777,14 +788,13 @@ body {
 }
 
 .scrollable-dropdown .Select-menu-outer {
-  position: absolute;       /* important : faire flotter au-dessus du parent */
-  top: 100%;                /* juste en dessous de l’input */
+  position: absolute;       
+  top: 100%;                
   left: 0;
-  z-index: 9999;            /* s’assure que c’est au-dessus */
-  min-width: 220px;         /* largeur minimale */
-  max-width: 600px;         /* largeur maximale si tu veux */
-  max-height: 400px;        /* hauteur maximale avant scroll */
-  overflow-y: auto;         /* permet de scroller si beaucoup d’options */
+  z-index: 9999;            
+  width : 150px;       
+  max-height: 400px;        
+  overflow-y: auto;         
   background: rgba(5,15,35,0.98) !important;
   border: 2px solid rgba(0,240,255,0.28) !important;
   border-radius: 16px;
