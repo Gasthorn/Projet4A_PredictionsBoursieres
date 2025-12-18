@@ -1,12 +1,13 @@
-from dash import html, dcc, Input, Output, callback, register_page,no_update
+from dash import html, dcc, Input, Output, State, callback, register_page,no_update,ctx,ALL
 import plotly.graph_objects as go
 import pandas as pd
 
 register_page(__name__, path="/actions_page", name="Actions")
 
 df_report = pd.read_csv("Data/data_report.csv")
-df = pd.read_csv("Data/ALL_FEATURES.csv", parse_dates=["date"])
-available_symbols = sorted(df["symbol"].unique())
+df_cleaned = pd.read_csv("Data/ALL_CLEANED.csv", parse_dates=["date"])
+df_features = pd.read_csv("Data/ALL_FEATURES.csv", parse_dates=["date"])
+available_symbols = sorted(df_cleaned["symbol"].unique())
 
 def filter_period(df, period):
     """Filtre df selon la période comme yfinance."""
@@ -27,6 +28,23 @@ def filter_period(df, period):
     cutoff = pd.Timestamp.today() - pd.Timedelta(days=days_map[period])
     return df[df["date"] >= cutoff]
 
+stock_items = []
+for symbol in available_symbols:
+    if symbol == "AAPL":
+        stock_items.append(html.Div(
+                symbol,
+                id={'type': 'stock-item', 'index': symbol},
+                n_clicks=0,
+                className="stock-item active"
+            ))
+    else :
+        stock_items.append(html.Div(
+                symbol,
+                id={'type': 'stock-item', 'index': symbol},
+                n_clicks=0,
+                className="stock-item"
+            ))
+
 # === LAYOUT ===
 dropdown_options = [
     {"label": symbol, "value": symbol}
@@ -41,16 +59,8 @@ layout = html.Div(className="actions-page", children=[
     ]),
     # Conteneur principal
     html.Div(className="actions-container", children=[
-        # === PANNEAU DE CONTRÔLE ===
-        html.Div(className="control-panel", children=[
-            html.H3("Sélection d'Actif", className="panel-title"),
-            dcc.Dropdown(
-                id='stock-dropdown',
-                options=dropdown_options,
-                value='AAPL',
-                multi = True,
-                className="lux-dropdown scrollable-dropdown"
-            ),
+        html.Div(className="sidebar-panel", children=[
+            # --- DIV GAUCHE ---   
             html.H3("Période", className="panel-title mt-20"),
             dcc.Dropdown(
                 id='period-dropdown',
@@ -64,10 +74,28 @@ layout = html.Div(className="actions-page", children=[
                     {'label': '2 ans', 'value': '2y'},
                     {'label': '3 ans', 'value': '3y'},
                     {'label': '5 ans', 'value': '5y'},
-
                 ],
                 value='6mo',
                 className="lux-dropdown scrollable-dropdown"
+            ),
+            dcc.Store(id="selected-stock", data="AAPL"),
+            html.H3("Actions", className="panel-title"),
+            html.Div(
+                className="stock-list",
+                children=stock_items
+            ),               
+        ]),
+        # --- GRAPHIQUE ---
+        html.Div(className="graph-panel", children=[
+            html.H3("Graphique des Prix", className="panel-title"),
+            dcc.Loading(
+                dcc.Graph(id='stock-graph', className="lux-graph"),
+                type="dot"
+            ),
+            dcc.Interval(
+                id='interval-graph-update',
+                interval=60*1000,
+                n_intervals=0
             )
         ]),
 
@@ -76,22 +104,6 @@ layout = html.Div(className="actions-page", children=[
             html.H3("Métriques Live", className="panel-title"),
             dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")
         ]),
-
-        # === GRAPHIQUE ===
-        html.Div(className="graph-panel", children=[
-            html.H3("Graphique des Prix", className="panel-title"),
-            dcc.Loading(dcc.Graph(id='stock-graph', className="lux-graph"), type="dot"),
-            # INTERVAL UNIQUE
-            dcc.Interval(id='interval-graph-update', interval=60*1000, n_intervals=0)
-        ]),
-
-        # === DONNEES AVANCEES ===
-        html.Div(className="advanced-control-panel",children=[
-            html.H3("Données Avancées", className="panel-title"),
-            dcc.Loading(html.Div(id="advanced-metrics-grid", className="metrics-grid"),
-                        type="cube"
-                        )
-        ])
     ])
 ])
 def get_interval(period):
@@ -102,33 +114,42 @@ def get_interval(period):
     
 # === CALLBACKS ==
 @callback(
+    Output("selected-stock", "data"),
+    Output({"type": "stock-item", "index": ALL}, "className"),
+    Input({"type": "stock-item", "index": ALL}, "n_clicks"),
+    State({"type": "stock-item", "index": ALL}, "id"),
+    prevent_initial_call=True
+)
+def select_single_stock(n_clicks, ids):
+    if not ctx.triggered:
+        return no_update, no_update
+
+    selected = ctx.triggered_id["index"]
+
+    classes = [
+        "stock-item active" if item["index"] == selected else "stock-item"
+        for item in ids
+    ]
+
+    return selected, classes
+@callback(
     Output('stock-graph', 'figure'),
     Output('live-metrics', 'children'),
     Input('interval-graph-update', 'n_intervals'),
-    Input('stock-dropdown', 'value'),
+    Input("selected-stock", "data"),
     Input('period-dropdown', 'value'),
 )
 def update_graph_and_metrics(n, symbol, period):
-
-    color_palette = [
-        ((0, 255, 0), (0, 100, 0)),
-        ((0, 120, 255), (0, 40, 120)),
-        ((255, 165, 0), (140, 70, 0)),
-        ((200, 0, 200), (100, 0, 100)),
-        ((255, 20, 147), (120, 0, 70)),
-        ((0, 206, 209), (0, 80, 80)),
-        ((255, 255, 0), (150, 150, 0)),
-        ((255, 69, 0), (140, 35, 0)),
-        ((75, 0, 130), (30, 0, 50)),
-        ((60, 179, 113), (20, 90, 50)),
-    ]
 
     fig = go.Figure()
     metrics = [
         html.Div(className="metric-item metric-header", children=[
             html.Span("Ticker"),
             html.Span("Prix Actuel"),
-            html.Span("Variation (1j)")
+            html.Span("Variation (1j)"),
+             html.Span("Volatilité 10j"),
+            html.Span("Retour quotidien"),
+            html.Span("Overnight Gap")
         ])
     ]
 
@@ -140,54 +161,92 @@ def update_graph_and_metrics(n, symbol, period):
         symbols = []
 
     if not symbols:
-        fig.add_annotation(text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False)
+        fig.add_annotation(
+            text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False
+        )
         return fig, [html.Div("Aucune action sélectionnée", className="metric-item error")]
 
-    for i, ticker_symbol in enumerate(symbols):
+    # On ne gère que le premier ticker (ou on peut concaténer les graphiques)
+    ticker_symbol = symbols[0]
 
-        # Filtrer les données pour ce ticker
-        hist = df[df["symbol"] == ticker_symbol].sort_values("date").copy()
+    # Filtrer les données pour ce ticker
+    hist_graph = df_cleaned[df_cleaned["symbol"] == ticker_symbol].sort_values("date").copy()
+    if hist_graph.empty:
+        fig.add_annotation(
+            text=f"Aucune donnée pour {ticker_symbol}", x=0.5, y=0.5, showarrow=False
+        )
+        return fig, [html.Div(f"Aucune donnée pour {ticker_symbol}", className="metric-item error")]
 
-        if hist.empty:
-            continue
+    # Filtrage par période
+    hist_graph = filter_period(hist_graph, period)
+    if hist_graph.empty:
+        fig.add_annotation(
+            text=f"Aucune donnée pour la période sélectionnée", x=0.5, y=0.5, showarrow=False
+        )
+        return fig, [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")]
 
-        # Filtrage par période
-        hist = filter_period(hist, period)
+    # Couleurs simples : vert pour hausse, rouge pour baisse
+    increasing_color = "green"
+    decreasing_color = "red"
 
-        if hist.empty:
-            continue
+    # Ajout du graphique
+    fig.add_trace(go.Candlestick(
+        x=hist_graph["date"],
+        open=hist_graph["Open"],
+        high=hist_graph["High"],
+        low=hist_graph["Low"],
+        close=hist_graph["Close"],
+        name=ticker_symbol,
+        increasing_line_color=increasing_color,
+        decreasing_line_color=decreasing_color,
+        increasing_fillcolor="rgba(0,255,0,0.6)",
+        decreasing_fillcolor="rgba(255,0,0,0.6)"
+    ))
 
-        up_rgb, down_rgb = color_palette[i % len(color_palette)]
-        up_line = f"rgb({up_rgb[0]},{up_rgb[1]},{up_rgb[2]})"
-        down_line = f"rgb({down_rgb[0]},{down_rgb[1]},{down_rgb[2]})"
-        up_fill = f"rgba({up_rgb[0]},{up_rgb[1]},{up_rgb[2]},0.6)"
-        down_fill = f"rgba({down_rgb[0]},{down_rgb[1]},{down_rgb[2]},0.6)"
+    hist_metric = df_features[df_features["symbol"] == ticker_symbol].sort_values("date").copy()
+    if hist_metric.empty:
+        fig.add_annotation(
+            text=f"Aucune donnée pour {ticker_symbol}", x=0.5, y=0.5, showarrow=False
+        )
+        return fig, [html.Div(f"Aucune donnée pour {ticker_symbol}", className="metric-item error")]
 
-        # Ajout du graphique
-        fig.add_trace(go.Candlestick(
-            x=hist["date"],
-            open=hist["Open"],
-            high=hist["High"],
-            low=hist["Low"],
-            close=hist["Close"],
-            name=ticker_symbol,
-            increasing_line_color=up_line,
-            decreasing_line_color=down_line,
-            increasing_fillcolor=up_fill,
-            decreasing_fillcolor=down_fill
+    # Filtrage par période
+    hist_metric = filter_period(hist_metric, period)
+    if hist_metric.empty:
+        fig.add_annotation(
+            text=f"Aucune donnée pour la période sélectionnée", x=0.5, y=0.5, showarrow=False
+        )
+        return fig, [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")]
+
+    if hist_metric.empty:
+        metrics.append(html.Div(
+            f"Aucune donnée métrique pour {ticker_symbol}",
+            className="metric-item error"
         ))
+    # Métriques
+    current = hist_metric["Close"].iloc[-1]
+    prev = hist_metric["Close"].iloc[-2] if len(hist_metric) > 1 else current
+    change = (current - prev) / prev * 100 if prev != 0 else 0
+    vol = hist_metric["volatility_10"].iloc[-1] if "volatility_10" in hist_metric.columns else 0
+    ret = hist_metric["daily_return"].iloc[-1] if "daily_return" in hist_metric.columns else 0
+    gap = hist_metric["overnight_gap"].iloc[-1] if "overnight_gap" in hist_metric.columns else 0
 
-        # Métriques
-        current = hist["Close"].iloc[-1]
-        prev = hist["Close"].iloc[-2] if len(hist) > 1 else current
-        change = (current - prev) / prev * 100 if prev != 0 else 0
+    # Assurer des floats pour l'affichage
+    vol = float(vol) if vol is not None else 0
+    ret = float(ret) if ret is not None else 0
+    gap = float(gap) if gap is not None else 0
 
-        metrics.append(html.Div(className="metric-item", children=[
-            html.Span(ticker_symbol),
-            html.Span(f"${current:,.2f}"),
-            html.Span(f"{'+' if change > 0 else ''}{change:.2f}%",
-                      className=f"metric-change {'up' if change > 0 else 'down'}")
-        ]))
+    metrics.append(html.Div(className="metric-item", children=[
+        html.Span(ticker_symbol),
+        html.Span(f"${current:,.2f}"),
+        html.Span(
+            f"{'+' if change > 0 else ''}{change:.2f}%",
+            className=f"metric-change {'up' if change > 0 else 'down'}"
+        ),
+        html.Span(f"{vol:.4f}", className=f"metric-change {'up' if vol > 0 else 'down'}"),
+        html.Span(f"{ret:.4f}", className=f"metric-change {'up' if ret > 0 else 'down'}"),
+        html.Span(f"{gap:.4f}", className=f"metric-change {'up' if gap > 0 else 'down'}"),
+    ]))
 
     fig.update_layout(
         template="plotly_dark",
@@ -201,50 +260,3 @@ def update_graph_and_metrics(n, symbol, period):
     )
 
     return fig, metrics
-
-@callback(
-    Output("advanced-metrics-grid", "children"),
-    Input("stock-dropdown", "value"),
-)
-def update_advanced_metrics(symbols):
-    if isinstance(symbols, str):
-        symbols = [symbols]
-    elif isinstance(symbols, list):
-        symbols = [s for s in symbols if s]
-    else:
-        symbols = []
-
-    if not symbols:
-        return [html.Div("Aucun ticker sélectionné", className="metric-item error")]
-
-    metrics = [
-        html.Div(className="metric-item metric-header", children=[
-            html.Span("Ticker"),
-            html.Span("Volatilité 10j"),
-            html.Span("Retour quotidien"),
-            html.Span("Overnight Gap")
-        ])
-    ]
-
-    for ticker in symbols:
-        hist = df[df["symbol"] == ticker].sort_values("date")
-        if hist.empty:
-            continue
-
-        last_row = hist.iloc[-1]
-
-        # Forcer conversion float si jamais
-        vol = float(last_row["volatility_10"])
-        ret = float(last_row["daily_return"])
-        gap = float(last_row["overnight_gap"])
-
-        metrics.append(
-            html.Div(className="metric-item", children=[
-                html.Span(ticker, className="metric-title"),
-                html.Span(f"{vol:.4f}", className=f"metric-change {'up' if vol > 0 else 'down'}"),
-                html.Span(f"{ret:.4f}", className=f"metric-change {'up' if ret > 0 else 'down'}"),
-                html.Span(f"{gap:.4f}", className=f"metric-change {'up' if gap > 0 else 'down'}"),
-            ])
-        )
-
-    return metrics
