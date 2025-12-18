@@ -188,6 +188,13 @@ body {
   transition: padding-top 0.4s ease;
 }
 
+.page-content:has(.actions-page) {
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .page-content.with-ticker { padding-top: 140px; }
 .page-content.no-ticker { padding-top: 96px; }
 
@@ -522,8 +529,9 @@ body {
 /* ====================== PAGE ACTIONS - TradeLux FUTURISTE LUXE ====================== */
 .actions-page {
   padding: 140px 40px 100px;
-  max-width: 1800px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;   
+  margin: 0;         
   position: relative;
   z-index: 10;
 }
@@ -532,6 +540,7 @@ body {
 .page-title {
   text-align: center;
   margin-bottom: 70px;
+  margin-top : auto;
 }
 .glow-title {
   font-size: 4rem;
@@ -565,13 +574,115 @@ body {
 /* Conteneur principal */
 .actions-container {
   display: grid;
-  grid-template-columns: 400px 400px 1fr;
+  grid-template-columns: 225px 1fr;
   gap: 36px;
   align-items: start;
 }
 
+.actions-container > .metrics-panel,
+.actions-container > .advanced-control-panel {
+  grid-column: 1 / -1; /* ces div prennent toute la largeur */
+}
+
+/*left sidebar*/
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+
+  background: linear-gradient(145deg, rgba(10,25,50,0.75), rgba(5,15,35,0.6));
+  border-radius: 28px;
+  border: 1.8px solid rgba(0,240,255,0.25);
+  padding: 36px;
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+
+  box-shadow: 
+    0 30px 80px rgba(0,0,0,0.65),
+    0 0 45px rgba(0,240,255,0.2),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+
+  height: 100%;
+  width: 225px;
+}
+
+/* === LISTE ACTIONS === */
+.stock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 75%;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+/* Scroll discret */
+.stock-list::-webkit-scrollbar {
+  width: 6px;
+}
+.stock-list::-webkit-scrollbar-thumb {
+  background: rgba(0,240,255,0.25);
+  border-radius: 10px;
+}
+.stock-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* === ACTION ITEM === */
+.stock-item {
+  padding: 14px 18px;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+
+  background: linear-gradient(
+    135deg,
+    rgba(15,35,70,0.55),
+    rgba(10,25,55,0.45)
+  );
+
+  border-radius: 16px;
+  border: 1.5px solid rgba(0,240,255,0.18);
+  cursor: pointer;
+
+  transition: 
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease,
+    background 0.25s ease;
+}
+
+.stock-item:hover {
+  transform: translateX(6px);
+  background: linear-gradient(
+    135deg,
+    rgba(25,55,100,0.7),
+    rgba(15,40,85,0.6)
+  );
+  border-color: rgba(0,240,255,0.45);
+  box-shadow: 0 10px 30px rgba(0,240,255,0.25);
+}
+
+/* === ACTION ACTIVE === */
+.stock-item.active {
+  background: linear-gradient(
+    135deg,
+    var(--accent),
+    var(--accent-2)
+  );
+  color: #001018;
+  font-weight: 900;
+  border-color: rgba(0,240,255,0.9);
+
+  box-shadow:
+    0 0 25px rgba(0,240,255,0.7),
+    0 0 60px rgba(0,240,255,0.4);
+}
+
 /* Panneaux */
-.control-panel, .metrics-panel {
+.metrics-panel {
   background: linear-gradient(145deg, rgba(10,25,50,0.75), rgba(5,15,35,0.6));
   border-radius: 24px;
   border: 1.5px solid rgba(0,240,255,0.22);
@@ -587,19 +698,7 @@ body {
   overflow: hidden;
 }
 
-.control-panel{
-  height: 400px
-}
-
-.control-panel:has(#stock-dropdown .Select.is-open){
-  height : 500px
-}
-
-.control-panel:has(#period-dropdown .Select.is-open){
-  height : 600px
-}
-
-.control-panel::before, .metrics-panel::before {
+.metrics-panel::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -609,9 +708,9 @@ body {
   transition: opacity 0.5s ease;
 }
 
-.control-panel:hover::before, .metrics-panel:hover::before { opacity: 1; }
+.metrics-panel:hover::before { opacity: 1; }
 
-.control-panel:hover, .metrics-panel:hover {
+.metrics-panel:hover {
   transform: translateY(-10px) scale(1.02);
   box-shadow: 
     0 40px 100px rgba(0,0,0,0.7),
@@ -751,7 +850,6 @@ body {
 
 /* GRAPHIQUE LARGE */
 .graph-panel {
-  grid-column: 1 / -1;
   background: linear-gradient(145deg, rgba(8,20,40,0.92), rgba(3,10,25,0.78));
   border-radius: 32px;
   border: 2px solid rgba(0,240,255,0.3);
