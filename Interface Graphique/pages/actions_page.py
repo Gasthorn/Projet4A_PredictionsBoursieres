@@ -52,6 +52,9 @@ dropdown_options = [
 ]
 
 layout = html.Div(className="actions-page", children=[
+    #Store permettant la valeur par défaut du graph
+    dcc.Store(id="selected-stock", data="AAPL"),
+
     # Titre animé
     html.Div(className="page-title", children=[
         html.H1("Analyse d'Actifs en Temps Réel", className="glow-title"),
@@ -59,31 +62,28 @@ layout = html.Div(className="actions-page", children=[
     ]),
     # Conteneur principal
     html.Div(className="actions-container", children=[
-        html.Div(className="sidebar-panel", children=[
-            # --- DIV GAUCHE ---   
-            html.H3("Période", className="panel-title mt-20"),
-            dcc.Dropdown(
-                id='period-dropdown',
-                options=[
-                    {'label': '1 mois', 'value': '1mo'},
-                    {'label': '2 mois', 'value': '2mo'},
-                    {'label': '3 mois', 'value': '3mo'},
-                    {'label': '6 mois', 'value': '6mo'},
-                    {'label': '9 mois', 'value': '9mo'},
-                    {'label': '1 an', 'value': '1y'},
-                    {'label': '2 ans', 'value': '2y'},
-                    {'label': '3 ans', 'value': '3y'},
-                    {'label': '5 ans', 'value': '5y'},
-                ],
-                value='6mo',
-                className="lux-dropdown scrollable-dropdown"
-            ),
-            dcc.Store(id="selected-stock", data="AAPL"),
-            html.H3("Actions", className="panel-title"),
-            html.Div(
-                className="stock-list",
-                children=stock_items
-            ),               
+        html.Div(className="top-bar",children=[
+                html.Div(
+                    className="stock-bar",
+                    children=stock_items
+                ),
+                dcc.Dropdown(
+                    searchable=False,
+                    maxHeight=100,
+                    id='period-dropdown',
+                    options=[
+                        {'label': '1 mois', 'value': '1mo'},
+                        {'label': '2 mois', 'value': '2mo'},
+                        {'label': '3 mois', 'value': '3mo'},
+                        {'label': '6 mois', 'value': '6mo'},
+                        {'label': '9 mois', 'value': '9mo'},
+                        {'label': '1 an', 'value': '1y'},
+                        {'label': '2 ans', 'value': '2y'},
+                        {'label': '3 ans', 'value': '3y'},
+                        {'label': '5 ans', 'value': '5y'},
+                    ],
+                    value='6mo',
+                    className="lux-dropdown scrollable-dropdown"),
         ]),
         # --- GRAPHIQUE ---
         html.Div(className="graph-panel", children=[
@@ -153,22 +153,13 @@ def update_graph_and_metrics(n, symbol, period):
         ])
     ]
 
-    if isinstance(symbol, str):
-        symbols = [symbol]
-    elif isinstance(symbol, list):
-        symbols = [s for s in symbol if s]
-    else:
-        symbols = []
-
-    if not symbols:
+    if not symbol:
         fig.add_annotation(
             text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False
         )
         return fig, [html.Div("Aucune action sélectionnée", className="metric-item error")]
 
-    # On ne gère que le premier ticker (ou on peut concaténer les graphiques)
-    ticker_symbol = symbols[0]
-
+    ticker_symbol = symbol
     # Filtrer les données pour ce ticker
     hist_graph = df_cleaned[df_cleaned["symbol"] == ticker_symbol].sort_values("date").copy()
     if hist_graph.empty:
@@ -243,7 +234,7 @@ def update_graph_and_metrics(n, symbol, period):
             f"{'+' if change > 0 else ''}{change:.2f}%",
             className=f"metric-change {'up' if change > 0 else 'down'}"
         ),
-        html.Span(f"{vol:.4f}", className=f"metric-change {'up' if vol > 0 else 'down'}"),
+        html.Span(f"{vol:.4f}", className="metric-change"),
         html.Span(f"{ret:.4f}", className=f"metric-change {'up' if ret > 0 else 'down'}"),
         html.Span(f"{gap:.4f}", className=f"metric-change {'up' if gap > 0 else 'down'}"),
     ]))

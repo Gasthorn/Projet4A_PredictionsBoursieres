@@ -573,38 +573,50 @@ body {
 
 /* Conteneur principal */
 .actions-container {
-  display: grid;
-  grid-template-columns: 225px 1fr;
-  gap: 36px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
 }
 
 .actions-container > .metrics-panel,
-.actions-container > .advanced-control-panel {
+.actions-container > .advanced-control-panel{
   grid-column: 1 / -1; /* ces div prennent toute la largeur */
 }
 
-/*left sidebar*/
-.sidebar-panel {
+/* ====================== BARRE HORIZONTALE ACTIONS ====================== */
+.top-bar {
   display: flex;
-  flex-direction: column;
-  gap: 26px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+
+  padding: 26px 36px;
+  margin-bottom: 40px;
 
   background: linear-gradient(145deg, rgba(10,25,50,0.75), rgba(5,15,35,0.6));
-  border-radius: 28px;
-  border: 1.8px solid rgba(0,240,255,0.25);
-  padding: 36px;
-
+  border-radius: 26px;
+  border: 1.5px solid rgba(0,240,255,0.25);
   backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 
-  box-shadow: 
-    0 30px 80px rgba(0,0,0,0.65),
-    0 0 45px rgba(0,240,255,0.2),
-    inset 0 1px 0 rgba(255,255,255,0.08);
+  box-shadow:
+    0 25px 70px rgba(0,0,0,0.6),
+    0 0 40px rgba(0,240,255,0.15);
+}
 
-  height: 100%;
-  width: 225px;
+/* Liste horizontale */
+.stock-bar {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.stock-bar::-webkit-scrollbar {
+  height: 6px;
+}
+.stock-bar::-webkit-scrollbar-thumb {
+  background: rgba(0,240,255,0.3);
+  border-radius: 10px;
 }
 
 /* === LISTE ACTIONS === */
@@ -767,6 +779,7 @@ body {
   font-weight: 600;
   box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
   transition: all 0.35s ease;
+  min-width: 180px;
   width: auto; /* largeur automatique selon le contenu */
 }
 
@@ -788,13 +801,12 @@ body {
 }
 
 .scrollable-dropdown .Select-menu-outer {
-  position: absolute;       
+  position: absolute !important;       
   top: 100%;                
   left: 0;
   z-index: 9999;            
   width : 150px;       
-  max-height: 400px;        
-  overflow-y: auto;         
+  overflow-y: auto;
   background: rgba(5,15,35,0.98) !important;
   border: 2px solid rgba(0,240,255,0.28) !important;
   border-radius: 16px;
@@ -879,7 +891,7 @@ body {
   height: 620px !important;
   width: 100% !important;
   border-radius: 24px;
-  overflow: hidden;
+  
   box-shadow: 0 25px 60px rgba(0,0,0,0.6), inset 0 0 40px rgba(0,240,255,0.18);
   background: rgba(0,0,0,0.5) !important;
 }
