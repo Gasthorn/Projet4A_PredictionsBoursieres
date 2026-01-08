@@ -28,22 +28,26 @@ def filter_period(df, period):
     cutoff = pd.Timestamp.today() - pd.Timedelta(days=days_map[period])
     return df[df["date"] >= cutoff]
 
+symbol_to_name = {
+    "AAPL": "Apple",
+    "AMZN": "Amazon",
+    "BTC-USD": "Bitcoin",
+    "GOOGL": "Google",
+    "META": "Meta",
+    "MSFT": "Microsoft",
+    "NVDA": "NVIDIA",
+    "TSLA": "Tesla"
+}
+
 stock_items = []
 for symbol in available_symbols:
-    if symbol == "AAPL":
-        stock_items.append(html.Div(
-                symbol,
-                id={'type': 'stock-item', 'index': symbol},
-                n_clicks=0,
-                className="stock-item active"
-            ))
-    else :
-        stock_items.append(html.Div(
-                symbol,
-                id={'type': 'stock-item', 'index': symbol},
-                n_clicks=0,
-                className="stock-item"
-            ))
+    display_name = symbol_to_name.get(symbol, symbol)  # fallback au symbole si pas de nom
+    stock_items.append(html.Div(
+        display_name,
+        id={'type': 'stock-item', 'index': symbol},  # on garde le symbol pour le callback
+        n_clicks=0,
+        className="stock-item active" if symbol == "AAPL" else "stock-item"
+    ))
 
 # === LAYOUT ===
 dropdown_options = [
@@ -67,6 +71,7 @@ layout = html.Div(className="actions-page", children=[
                     className="stock-bar",
                     children=stock_items
                 ),
+                #Ajouter prix actuel / daily-return / gap overnight
                 dcc.Dropdown(
                     searchable=False,
                     maxHeight=100,
@@ -85,6 +90,24 @@ layout = html.Div(className="actions-page", children=[
                     value='6mo',
                     className="lux-dropdown scrollable-dropdown"),
         ]),
+        # --- Recommandations (prédictions) ---
+        html.Div(className="ai-panel", children=[
+            html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
+            html.Div(className="text-panel", children=[
+                html.H3("Recommandations", className="panel-title"),
+                #Signal principal / valeur previsionnelle / confiance
+            ]),
+            html.Div(className="text-panel",children=[
+                html.H3("Performances Passée du Modèle",className="panel-title"),
+                #Précision / Métrique clé / graphique baktesting (gains si on suit les conseils)
+            ])
+        ]),
+        # === MÉTRIQUES EN TEMPS RÉEL ===
+        html.Div(className="text-panel", children=[
+            html.H3("Résumé rapide : Top Stats", className="panel-title"),
+            #High / Low (du jour) / volume / volume moyen récent / 
+            dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")  #modifier les stats 
+        ]),
         # --- GRAPHIQUE ---
         html.Div(className="graph-panel", children=[
             html.H3("Graphique des Prix", className="panel-title"),
@@ -98,11 +121,13 @@ layout = html.Div(className="actions-page", children=[
                 n_intervals=0
             )
         ]),
-
-        # === MÉTRIQUES EN TEMPS RÉEL ===
-        html.Div(className="metrics-panel", children=[
-            html.H3("Métriques Live", className="panel-title"),
-            dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")
+        html.Div(className="text-panel", children=[
+            html.H3("Indicateurs Techniques", className="panel-title"),
+            #Moyenne Mobile / RSI / Volatilité /
+        ]),
+        # --- Footer ---
+        html.Div(className="text-panel", children=[
+            html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
         ]),
     ])
 ])
@@ -144,7 +169,7 @@ def update_graph_and_metrics(n, symbol, period):
     fig = go.Figure()
     metrics = [
         html.Div(className="metric-item metric-header", children=[
-            html.Span("Ticker"),
+            html.Span("Entreprise"),
             html.Span("Prix Actuel"),
             html.Span("Variation (1j)"),
              html.Span("Volatilité 10j"),
@@ -228,7 +253,7 @@ def update_graph_and_metrics(n, symbol, period):
     gap = float(gap) if gap is not None else 0
 
     metrics.append(html.Div(className="metric-item", children=[
-        html.Span(ticker_symbol),
+        html.Span(symbol_to_name.get(ticker_symbol, ticker_symbol)),
         html.Span(f"${current:,.2f}"),
         html.Span(
             f"{'+' if change > 0 else ''}{change:.2f}%",
