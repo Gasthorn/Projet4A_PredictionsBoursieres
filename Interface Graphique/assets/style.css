@@ -989,18 +989,12 @@ body {
   transition: color 0.3s ease;
 }
 
-/* Première colonne */
-.lux-table td:first-child {
-  text-align: left;
-  font-weight: 700;
-  color: var(--accent-2);
-}
-
 /* Couleur selon valeur */
 .lux-table .up { color: #7cffb2; font-weight: 700; }
 .lux-table .down { color: #ff7b7b; font-weight: 700; }
 
-
+.metric-value .up { color: #7cffb2; font-weight: 700; }
+.metric-value .down { color: #ff7b7b; font-weight: 700; }
 
 
 /* Responsive : réduire padding sur mobile */
@@ -1011,7 +1005,7 @@ body {
   }
 }
 
-/* Optionnel : lignes alternées discrètes */
+/* lignes alternées discrètes */
 .lux-table tbody tr:nth-child(even) {
   background: linear-gradient(135deg, rgba(15,35,70,0.45), rgba(10,25,55,0.3));
 }
