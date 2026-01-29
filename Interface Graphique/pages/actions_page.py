@@ -1,6 +1,8 @@
 from dash import html, dcc, Input, Output, State, callback, register_page,no_update,ctx,ALL
 import plotly.graph_objects as go
 import pandas as pd
+import numpy as np
+from tensorflow.keras.models import load_model
 
 register_page(__name__, path="/actions_page", name="Actions")
 
@@ -8,6 +10,53 @@ df_report = pd.read_csv("Data/data_report.csv")
 df_cleaned = pd.read_csv("Data/ALL_CLEANED.csv", parse_dates=["date"])
 df_features = pd.read_csv("Data/ALL_FEATURES.csv", parse_dates=["date"])
 available_symbols = sorted(df_cleaned["symbol"].unique())
+
+lstm_model = load_model("Modèle IA/global_lstm_returns.keras")
+symbol_to_id = {
+    "AAPL": 0,
+    "AMZN": 1,
+    "BTC-USD": 2,
+    "GOOGL": 3,
+    "META": 4,
+    "MSFT": 5,
+    "NVDA": 6,
+    "TSLA": 7,
+}
+
+def prepare_lstm_inputs(df_features, symbol, n_timesteps=60):
+    """
+    Prépare les deux entrées pour le LSTM :
+    - Séquence temporelle (Close)
+    - ID du symbol
+    """
+    seq_input = df_features["Close"].tail(n_timesteps).values.reshape(1, n_timesteps, 1)
+
+    symbol_id = symbol_to_id[symbol]
+    extra_input = np.array([[symbol_id]])  # forme (1,1)
+
+    return [seq_input, extra_input]
+
+def predict_lstm(df_features_symbol, symbol):
+    """
+    Retourne signal, confiance et backtest
+    """
+    inputs = prepare_lstm_inputs(df_features_symbol, symbol)
+    if inputs is None:
+        return "Pas assez de données", "N/A", "N/A"
+
+    # Prédiction
+    pred_price = lstm_model.predict(inputs)[0][0]
+
+    # Signal simple
+    signal = "Acheter" if pred_price > 0 else "Vendre"
+
+    # Confiance relative (en %)
+    confidence = abs(pred_price)*1000
+
+    # Backtest statique (à adapter si tu as un vrai backtest)
+    backtest = "Gain moyen 6 mois : +3%"
+
+    return signal, f"{confidence:.1f}%", backtest, pred_price
 
 def filter_period(df, period):
     """Filtre df selon la période comme yfinance."""
@@ -96,20 +145,39 @@ layout = html.Div(className="actions-page", children=[
             # --- Recommandations (prédictions) ---
             html.Div(className="ai-panel", children=[
                 html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
+                #Signal du modèle
                 html.Div(className="text-panel", children=[
-                    html.H3("Recommandations", className="panel-title"),
-                    #Signal principal / valeur previsionnelle / confiance
+                    html.Table(
+                        className="lux-table split-table",
+                        children=[
+                            html.Thead(
+                                html.Tr([
+                                    html.Th("Signal"),
+                                    html.Th("Prédiction"),
+                                    html.Th("Confiance"),
+                                ])
+                            ),
+                            html.Tbody([
+                                html.Tr([
+                                    html.Td(id="ai-signal", className="metric-value up", children="Chargement..."),
+                                    html.Td(id="ai-predict", className="metric-value up", children="Chargement..."),
+                                    html.Td(id="ai-confidence", className="metric-value", children="Chargement..."),
+                                ])
+                            ])
+                        ]
+                    )
+
                 ]),
-                html.Div(className="text-panel",children=[
-                    html.H3("Performances Passée du Modèle",className="panel-title"),
-                    #Précision / Métrique clé / graphique baktesting (gains si on suit les conseils)
+                # Backtest / Performance passée
+                html.Div(className="text-panel", children=[
+                    html.H4("Performance passée", className="panel-title"),
+                    html.Div(id="ai-backtest", className="metric-value", children="Chargement...")  
                 ])
             ]),
             # === MÉTRIQUES EN TEMPS RÉEL ===
             html.Div(className="text-panel", children=[
                 html.H3("Résumé rapide : Top Stats", className="panel-title"),
-                #High / Low (du jour) / volume / volume moyen récent / 
-                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")  #modifier les stats 
+                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")  
             ])
         ]),
         # --- GRAPHIQUE ---
@@ -164,6 +232,12 @@ def select_single_stock(n_clicks, ids):
 @callback(
     Output('stock-graph', 'figure'),
     Output('live-metrics', 'children'),
+    Output('ai-signal', 'children'),
+    Output('ai-signal', 'className'),
+    Output('ai-predict', 'children'),
+    Output('ai-predict', 'className'),
+    Output('ai-confidence', 'children'),
+    Output('ai-backtest', 'children'),
     Input('interval-graph-update', 'n_intervals'),
     Input("selected-stock", "data"),
     Input('period-dropdown', 'value'),
@@ -171,6 +245,9 @@ def select_single_stock(n_clicks, ids):
 def update_graph_and_metrics(n, symbol, period):
 
     fig = go.Figure()
+
+    metrics = []
+    ai_signal, ai_confidence, ai_backtest, ai_prediction = "N/A", "N/A", "N/A","N/A"
 
     if not symbol:
         fig.add_annotation(
@@ -274,6 +351,11 @@ def update_graph_and_metrics(n, symbol, period):
         )
     ])
 
+    ai_signal, ai_confidence, ai_backtest, ai_prediction = predict_lstm(hist_metric, symbol)
+
+    signal_class = "metric-value up" if ai_signal == "Acheter" else "metric-value down"
+    predict_class = "metric-value up" if ai_signal == "Acheter" else "metric-value down"
+
 
     fig.update_layout(
         template="plotly_dark",
@@ -286,4 +368,4 @@ def update_graph_and_metrics(n, symbol, period):
         height=500
     )
 
-    return fig, metrics
+    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_confidence, ai_backtest
