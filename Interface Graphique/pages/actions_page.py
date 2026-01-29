@@ -65,48 +65,52 @@ layout = html.Div(className="actions-page", children=[
         html.Div(className="neon-underline")
     ]),
     # Conteneur principal
+    html.Div(className="actions-navbar",children=[
+        html.Div(className="actions-navbar-inner",children=[
+            html.Div(
+                className="stock-bar",
+                children=stock_items
+            ),
+            dcc.Dropdown(
+                searchable=False,
+                maxHeight=100,
+                id='period-dropdown',
+                options=[
+                    {'label': '1 mois', 'value': '1mo'},
+                    {'label': '2 mois', 'value': '2mo'},
+                    {'label': '3 mois', 'value': '3mo'},
+                    {'label': '6 mois', 'value': '6mo'},
+                    {'label': '9 mois', 'value': '9mo'},
+                    {'label': '1 an', 'value': '1y'},
+                    {'label': '2 ans', 'value': '2y'},
+                    {'label': '3 ans', 'value': '3y'},
+                    {'label': '5 ans', 'value': '5y'},
+                ],
+                value='6mo',
+                className="lux-dropdown scrollable-dropdown"
+            )
+        ])
+    ]),
     html.Div(className="actions-container", children=[
-        html.Div(className="top-bar",children=[
-                html.Div(
-                    className="stock-bar",
-                    children=stock_items
-                ),
-                #Ajouter prix actuel / daily-return / gap overnight
-                dcc.Dropdown(
-                    searchable=False,
-                    maxHeight=100,
-                    id='period-dropdown',
-                    options=[
-                        {'label': '1 mois', 'value': '1mo'},
-                        {'label': '2 mois', 'value': '2mo'},
-                        {'label': '3 mois', 'value': '3mo'},
-                        {'label': '6 mois', 'value': '6mo'},
-                        {'label': '9 mois', 'value': '9mo'},
-                        {'label': '1 an', 'value': '1y'},
-                        {'label': '2 ans', 'value': '2y'},
-                        {'label': '3 ans', 'value': '3y'},
-                        {'label': '5 ans', 'value': '5y'},
-                    ],
-                    value='6mo',
-                    className="lux-dropdown scrollable-dropdown"),
-        ]),
-        # --- Recommandations (prédictions) ---
-        html.Div(className="ai-panel", children=[
-            html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
-            html.Div(className="text-panel", children=[
-                html.H3("Recommandations", className="panel-title"),
-                #Signal principal / valeur previsionnelle / confiance
+        html.Div(className="dual-panel-row",children=[
+            # --- Recommandations (prédictions) ---
+            html.Div(className="ai-panel", children=[
+                html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
+                html.Div(className="text-panel", children=[
+                    html.H3("Recommandations", className="panel-title"),
+                    #Signal principal / valeur previsionnelle / confiance
+                ]),
+                html.Div(className="text-panel",children=[
+                    html.H3("Performances Passée du Modèle",className="panel-title"),
+                    #Précision / Métrique clé / graphique baktesting (gains si on suit les conseils)
+                ])
             ]),
-            html.Div(className="text-panel",children=[
-                html.H3("Performances Passée du Modèle",className="panel-title"),
-                #Précision / Métrique clé / graphique baktesting (gains si on suit les conseils)
+            # === MÉTRIQUES EN TEMPS RÉEL ===
+            html.Div(className="text-panel", children=[
+                html.H3("Résumé rapide : Top Stats", className="panel-title"),
+                #High / Low (du jour) / volume / volume moyen récent / 
+                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")  #modifier les stats 
             ])
-        ]),
-        # === MÉTRIQUES EN TEMPS RÉEL ===
-        html.Div(className="text-panel", children=[
-            html.H3("Résumé rapide : Top Stats", className="panel-title"),
-            #High / Low (du jour) / volume / volume moyen récent / 
-            dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")  #modifier les stats 
         ]),
         # --- GRAPHIQUE ---
         html.Div(className="graph-panel", children=[
@@ -167,16 +171,6 @@ def select_single_stock(n_clicks, ids):
 def update_graph_and_metrics(n, symbol, period):
 
     fig = go.Figure()
-    metrics = [
-        html.Div(className="metric-item metric-header", children=[
-            html.Span("Entreprise"),
-            html.Span("Prix Actuel"),
-            html.Span("Variation (1j)"),
-             html.Span("Volatilité 10j"),
-            html.Span("Retour quotidien"),
-            html.Span("Overnight Gap")
-        ])
-    ]
 
     if not symbol:
         fig.add_annotation(
@@ -234,35 +228,52 @@ def update_graph_and_metrics(n, symbol, period):
         )
         return fig, [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")]
 
-    if hist_metric.empty:
-        metrics.append(html.Div(
-            f"Aucune donnée métrique pour {ticker_symbol}",
-            className="metric-item error"
-        ))
     # Métriques
-    current = hist_metric["Close"].iloc[-1]
-    prev = hist_metric["Close"].iloc[-2] if len(hist_metric) > 1 else current
-    change = (current - prev) / prev * 100 if prev != 0 else 0
-    vol = hist_metric["volatility_10"].iloc[-1] if "volatility_10" in hist_metric.columns else 0
-    ret = hist_metric["daily_return"].iloc[-1] if "daily_return" in hist_metric.columns else 0
-    gap = hist_metric["overnight_gap"].iloc[-1] if "overnight_gap" in hist_metric.columns else 0
+    price = hist_metric["Close"].iloc[-1]
+    high = hist_metric["High"].iloc[-1]
+    low = hist_metric["Low"].iloc[-1]
+    volume = hist_metric["Volume"].iloc[-1]
+    yesterday_price = hist_metric["Close"].iloc[-2]
+    change_pct = (price - yesterday_price) / yesterday_price * 100
 
-    # Assurer des floats pour l'affichage
-    vol = float(vol) if vol is not None else 0
-    ret = float(ret) if ret is not None else 0
-    gap = float(gap) if gap is not None else 0
+    change_class = "up" if change_pct >= 0 else "down"
 
-    metrics.append(html.Div(className="metric-item", children=[
-        html.Span(symbol_to_name.get(ticker_symbol, ticker_symbol)),
-        html.Span(f"${current:,.2f}"),
-        html.Span(
-            f"{'+' if change > 0 else ''}{change:.2f}%",
-            className=f"metric-change {'up' if change > 0 else 'down'}"
-        ),
-        html.Span(f"{vol:.4f}", className="metric-change"),
-        html.Span(f"{ret:.4f}", className=f"metric-change {'up' if ret > 0 else 'down'}"),
-        html.Span(f"{gap:.4f}", className=f"metric-change {'up' if gap > 0 else 'down'}"),
-    ]))
+    company = symbol_to_name.get(ticker_symbol, ticker_symbol)
+
+    metrics = html.Div(className="text-panel", children=[
+        html.Table(
+            className="lux-table split-table",
+            children=[
+                html.Thead(
+                    html.Tr([
+                        html.Th("Entreprise"),
+                        html.Th("Prix actuel"),
+                        html.Th("Var. vs hier"),
+                        html.Th(""),
+                    ])
+                ),
+                html.Tbody([
+                    # Ligne 1
+                    html.Tr([
+                        html.Td(company),
+                        html.Td(f"${price:,.2f}"),
+                        html.Td(
+                            f"{change_pct:+.2f}%",
+                            className=change_class
+                        ),
+                        html.Td(""),
+                    ]),
+                    # Ligne 2
+                    html.Tr([
+                        html.Td(f"High : {high:,.2f}"),
+                        html.Td(f"Low : {low:,.2f}"),
+                        html.Td(f"Volume : {volume:,.0f}"),
+                    ]),
+                ])
+            ]
+        )
+    ])
+
 
     fig.update_layout(
         template="plotly_dark",

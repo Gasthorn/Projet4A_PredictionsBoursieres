@@ -528,7 +528,7 @@ body {
 
 /* ====================== PAGE ACTIONS - TradeLux FUTURISTE LUXE ====================== */
 .actions-page {
-  padding: 60px 40px 100px;
+  padding: 40px 40px 100px;
   width: 100%;
   max-width: none;   
   margin: 0;         
@@ -583,29 +583,41 @@ body {
   grid-column: 1 / -1; /* ces div prennent toute la largeur */
 }
 
-/* ====================== BARRE HORIZONTALE ACTIONS ====================== */
-.top-bar {
+/* ====================== ACTIONS NAVBAR ====================== */
+.actions-navbar {
+  position: sticky;
+  top: 96px; /* ajuste selon ta navbar principale */
+  z-index: 1500;
+
+  width: 100%;
+  padding: 18px 36px;
+  margin-bottom: 40px;
+
+  background: linear-gradient(
+    145deg,
+    rgba(8,20,40,0.85),
+    rgba(4,12,30,0.75)
+  );
+
+  backdrop-filter: blur(22px);
+  border-bottom: 1.5px solid rgba(0,240,255,0.25);
+
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.65),
+    0 0 40px rgba(0,240,255,0.15);
+}
+
+.actions-navbar-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-
-  padding: 26px 36px;
-  margin-bottom: 40px;
-
-  background: linear-gradient(145deg, rgba(10,25,50,0.75), rgba(5,15,35,0.6));
-  border-radius: 26px;
-  border: 1.5px solid rgba(0,240,255,0.25);
-  backdrop-filter: blur(18px);
-
-  box-shadow:
-    0 25px 70px rgba(0,0,0,0.6),
-    0 0 40px rgba(0,240,255,0.15);
+  gap: 28px;
 }
 
 /* Liste horizontale */
 .stock-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   overflow: visible;
   position: relative;
@@ -885,12 +897,6 @@ body {
   transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.graph-panel:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 55px 130px rgba(0,0,0,0.85), 0 0 80px rgba(0,240,255,0.4);
-  border-color: rgba(0,240,255,0.55);
-}
-
 .lux-graph {
   height: 620px !important;
   width: 100% !important;
@@ -930,4 +936,82 @@ body {
   .hero { padding: 140px 15px 60px; }
   .hero p { font-size: 1.1rem; }
   .about-section { padding: 160px 15px 80px; }
+}
+
+/* Ligne double AI + Stats */
+.dual-panel-row {
+  display: grid;
+  grid-template-columns: 1fr; /* mobile */
+  gap: 40px;
+}
+
+/* Écrans larges */
+@media (min-width: 1200px) {
+  .dual-panel-row {
+    grid-template-columns: 1.3fr 1fr;
+    align-items: stretch;
+  }
+}
+
+/* ======================
+   TOP STATS - TABLEAU STYLE LUXE
+   ====================== */
+
+/* Style général du tableau */
+.lux-table {
+  width: 100%;
+  border-collapse: separate; 
+  border-spacing: 0 8px; 
+  background: linear-gradient(145deg, rgba(10,25,50,0.6), rgba(5,15,35,0.45));
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(0,240,255,0.1);
+  font-family: 'Inter', sans-serif;
+  font-size: 1.05rem;
+}
+
+/* Corps du tableau */
+.lux-table tbody tr {
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, rgba(15,35,70,0.5), rgba(10,25,55,0.35));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  border-left: 1.5px solid rgba(0,240,255,0.12);
+  border-right: 1.5px solid rgba(0,240,255,0.12);
+}
+
+/* Cellules */
+.lux-table td {
+  padding: 18px 14px;
+  text-align: center;
+  font-weight: 600;
+  color: #eaf6ff;
+  white-space: nowrap;
+  transition: color 0.3s ease;
+}
+
+/* Première colonne */
+.lux-table td:first-child {
+  text-align: left;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+/* Couleur selon valeur */
+.lux-table .up { color: #7cffb2; font-weight: 700; }
+.lux-table .down { color: #ff7b7b; font-weight: 700; }
+
+
+
+
+/* Responsive : réduire padding sur mobile */
+@media (max-width: 900px) {
+  .lux-table td {
+    padding: 12px 8px;
+    font-size: 0.95rem;
+  }
+}
+
+/* Optionnel : lignes alternées discrètes */
+.lux-table tbody tr:nth-child(even) {
+  background: linear-gradient(135deg, rgba(15,35,70,0.45), rgba(10,25,55,0.3));
 }
