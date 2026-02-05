@@ -44,16 +44,14 @@ def predict_lstm(df_features_symbol, symbol):
     if inputs is None:
         return "Pas assez de données", "N/A", "N/A"
 
-    # Prédiction
     pred_price = lstm_model.predict(inputs)[0][0]
-
-    # Signal simple
-    signal = "Acheter" if pred_price > 0 else "Vendre"
-
-    # Confiance relative (en %)
+    if (pred_price > 1/3):
+        signal = "Acheter"
+    elif (pred_price < -1/3):
+        signal = "Vendre"
+    else:
+        signal = "Garder"
     confidence = abs(pred_price)*1000
-
-    # Backtest statique (à adapter si tu as un vrai backtest)
     backtest = "Gain moyen 6 mois : +3%"
 
     return signal, f"{confidence:.1f}%", backtest, pred_price
@@ -159,8 +157,8 @@ layout = html.Div(className="actions-page", children=[
                             ),
                             html.Tbody([
                                 html.Tr([
-                                    html.Td(id="ai-signal", className="metric-value up", children="Chargement..."),
-                                    html.Td(id="ai-predict", className="metric-value up", children="Chargement..."),
+                                    html.Td(id="ai-signal", className="metric-value", children="Chargement..."),
+                                    html.Td(id="ai-predict", className="metric-value", children="Chargement..."),
                                     html.Td(id="ai-confidence", className="metric-value", children="Chargement..."),
                                 ])
                             ])
@@ -353,9 +351,15 @@ def update_graph_and_metrics(n, symbol, period):
 
     ai_signal, ai_confidence, ai_backtest, ai_prediction = predict_lstm(hist_metric, symbol)
 
-    signal_class = "metric-value up" if ai_signal == "Acheter" else "metric-value down"
-    predict_class = "metric-value up" if ai_signal == "Acheter" else "metric-value down"
-
+    if(ai_signal == "Acheter"):
+        signal_class = "metric-value up"
+        predict_class = "metric-value up"
+    elif(ai_signal == "Vendre"):
+        signal_class = "metric-value down"
+        predict_class = "metric-value down"
+    else:
+        signal_class = "metric-value"
+        predict_class = "metric-value"
 
     fig.update_layout(
         template="plotly_dark",
