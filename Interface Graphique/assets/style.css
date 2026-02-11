@@ -633,6 +633,17 @@ body {
   border-radius: 10px;
 }
 
+@media (max-width: 900px) {
+  .stock-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .stock-item {
+    flex: 0 0 auto;
+  }
+}s
+
 /* === LISTE ACTIONS === */
 .stock-list {
   display: flex;
