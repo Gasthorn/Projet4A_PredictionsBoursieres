@@ -32,7 +32,7 @@ def prepare_lstm_inputs(df_features, symbol, n_timesteps=60):
     seq_input = df_features["Close"].tail(n_timesteps).values.reshape(1, n_timesteps, 1)
 
     symbol_id = symbol_to_id[symbol]
-    extra_input = np.array([[symbol_id]])  # forme (1,1)
+    extra_input = np.array([[symbol_id]])  
 
     return [seq_input, extra_input]
 
@@ -54,7 +54,7 @@ def predict_lstm(df_features_symbol, symbol):
     confidence = abs(pred_price)*1000
     backtest = "Gain moyen 6 mois : +3%"
 
-    return signal, f"{confidence:.1f}%", backtest, pred_price
+    return signal, f"{confidence:.1f}%", backtest, f"{pred_price:.3f}"
 
 def filter_period(df, period):
     """Filtre df selon la période comme yfinance."""
@@ -142,9 +142,9 @@ layout = html.Div(className="actions-page", children=[
         html.Div(className="dual-panel-row",children=[
             # --- Recommandations (prédictions) ---
             html.Div(className="ai-panel", children=[
-                html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
                 #Signal du modèle
                 html.Div(className="text-panel", children=[
+                    html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
                     html.Table(
                         className="lux-table split-table",
                         children=[
@@ -163,14 +163,12 @@ layout = html.Div(className="actions-page", children=[
                                 ])
                             ])
                         ]
-                    )
-
-                ]),
-                # Backtest / Performance passée
-                html.Div(className="text-panel", children=[
+                    ),
+                    # Backtest / Performance passée
                     html.H4("Performance passée", className="panel-title"),
-                    html.Div(id="ai-backtest", className="metric-value", children="Chargement...")  
-                ])
+                    html.Div(id="ai-backtest", className="metric-value", children="Chargement...", style={"margin-bottom": "24px"}) ,
+                    html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
+                ]),
             ]),
             # === MÉTRIQUES EN TEMPS RÉEL ===
             html.Div(className="text-panel", children=[
@@ -190,14 +188,6 @@ layout = html.Div(className="actions-page", children=[
                 interval=60*1000,
                 n_intervals=0
             )
-        ]),
-        html.Div(className="text-panel", children=[
-            html.H3("Indicateurs Techniques", className="panel-title"),
-            #Moyenne Mobile / RSI / Volatilité /
-        ]),
-        # --- Footer ---
-        html.Div(className="text-panel", children=[
-            html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
         ]),
     ])
 ])
