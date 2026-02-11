@@ -57,7 +57,7 @@ app.layout = html.Div([
         html.Div(className="nav-links", children=[
             dcc.Link("Accueil", href="/", className="nav-link"),
             dcc.Link("Marchés", href="/actions_page", className="nav-link"),
-            dcc.Link("Analyse", href="/analysis", className="nav-link"),
+            dcc.Link("Analyse", href="/data", className="nav-link"),
             html.A("Contact", href="#contact-section", className="nav-link", **{"data-scroll": ""}),
         ]),
     ]),

@@ -97,11 +97,6 @@ for symbol in available_symbols:
     ))
 
 # === LAYOUT ===
-dropdown_options = [
-    {"label": symbol, "value": symbol}
-    for symbol in available_symbols
-]
-
 layout = html.Div(className="actions-page", children=[
     #Store permettant la valeur par défaut du graph
     dcc.Store(id="selected-stock", data="AAPL"),
