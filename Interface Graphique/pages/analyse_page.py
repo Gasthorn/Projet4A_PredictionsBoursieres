@@ -107,10 +107,10 @@ def generate_table_rows(df, max_rows=60):
         rows.append(
             html.Tr([
                 html.Td(row.get("date", "-")),
-                html.Td(row.get("Open", "-")),
-                html.Td(row.get("High", "-")),
-                html.Td(row.get("Low", "-")),
-                html.Td(row.get("Close", "-"), className=close_class),
+                html.Td(f"{row.get('Open', '-')}$"),
+                html.Td(f"{row.get('High', '-')}$"),
+                html.Td(f"{row.get('Low', '-')}$"),
+                html.Td(f"{row.get('Close', '-')}$", className=close_class),
                 html.Td(row.get("Volume", "-")),
                 html.Td(row.get("volatility_10", "-")),
                 html.Td(row.get("RSI_14", "-")),
