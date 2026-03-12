@@ -2,96 +2,65 @@ from dash import html, dcc, Input, Output, State, callback, register_page,no_upd
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
-from tensorflow.keras.models import load_model
+from supabase import create_client
 
 register_page(__name__, path="/actions_page", name="Actions")
 
-df_report = pd.read_csv("Data/data_report.csv")
-df_cleaned = pd.read_csv("Data/ALL_CLEANED.csv", parse_dates=["date"])
-df_features = pd.read_csv("Data/ALL_FEATURES.csv", parse_dates=["date"])
-available_symbols = sorted(df_cleaned["symbol"].unique())
-
-lstm_model = load_model("Modèle IA/global_lstm_returns.keras")
-symbol_to_id = {
-    "AAPL": 0,
-    "AMZN": 1,
-    "BTC-USD": 2,
-    "GOOGL": 3,
-    "META": 4,
-    "MSFT": 5,
-    "NVDA": 6,
-    "TSLA": 7,
+url = "https://qeolwdccnegosrbldxqa.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlb2x3ZGNjbmVnb3NyYmxkeHFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NjIxOTIsImV4cCI6MjA4MzQzODE5Mn0.BHFV2ANfkC3RP-_R-cyjp-8yKtQhsZhVWUmnGnuU9b4"
+supabase = create_client(url, key)
+symbol_groups = {
+    "BTC": ["BTC", "BTC-USD"],
+    # Ajouter d'autres regroupements si nécessaire
 }
 
-def prepare_lstm_inputs(df_features, symbol, n_timesteps=60):
-    """
-    Prépare les deux entrées pour le LSTM :
-    - Séquence temporelle (Close)
-    - ID du symbol
-    """
-    seq_input = df_features["Close"].tail(n_timesteps).values.reshape(1, n_timesteps, 1)
-
-    symbol_id = symbol_to_id[symbol]
-    extra_input = np.array([[symbol_id]])  
-
-    return [seq_input, extra_input]
-
-def predict_lstm(df_features_symbol, symbol):
-    """
-    Retourne signal, confiance et backtest
-    """
-    inputs = prepare_lstm_inputs(df_features_symbol, symbol)
-    if inputs is None:
-        return "Pas assez de données", "N/A", "N/A"
-
-    pred_price = lstm_model.predict(inputs)[0][0]
-    if (pred_price > 1/3):
-        signal = "Acheter"
-    elif (pred_price < -1/3):
-        signal = "Vendre"
-    else:
-        signal = "Garder"
-    confidence = abs(pred_price)*1000
-    backtest = "Gain moyen 6 mois : +3%"
-
-    return signal, f"{confidence:.1f}%", backtest, f"{pred_price:.3f}"
-
 def filter_period(df, period):
-    """Filtre df selon la période comme yfinance."""
     days_map = {
-        "1mo": 30,
-        "2mo": 60,
-        "3mo": 90,
-        "6mo": 182,
-        "9mo": 273,
-        "1y": 365,
-        "2y": 730,
-        "3y": 1095,
-        "5y": 1825,
+        "1mo": 30, "2mo": 60, "3mo": 90, "6mo": 182,
+        "9mo": 273, "1y": 365, "2y": 730, "3y": 1095, "5y": 1825
     }
     if period not in days_map:
         return df
 
-    cutoff = pd.Timestamp.today() - pd.Timedelta(days=days_map[period])
+    last_date = df["date"].iloc[0]
+    cutoff = last_date - pd.Timedelta(days=days_map[period])
+
     return df[df["date"] >= cutoff]
 
-symbol_to_name = {
-    "AAPL": "Apple",
-    "AMZN": "Amazon",
-    "BTC-USD": "Bitcoin",
-    "GOOGL": "Google",
-    "META": "Meta",
-    "MSFT": "Microsoft",
-    "NVDA": "NVIDIA",
-    "TSLA": "Tesla"
-}
-
 stock_items = []
+
+response = supabase.table("stocks") \
+    .select("symbol,name") \
+    .order("symbol") \
+    .execute()
+
+available_symbols_raw = []
+symbol_to_name_raw = {}
+
+for row in response.data:
+    available_symbols_raw.append(row["symbol"])
+    symbol_to_name_raw[row["symbol"]] = row["name"]
+
+available_symbols = []
+symbol_to_name = {}
+
+for group_name, group_symbols in symbol_groups.items():
+    present_symbols = [s for s in group_symbols if s in available_symbols_raw]
+    if present_symbols:
+        available_symbols.append(group_name)  
+        symbol_to_name[group_name] = symbol_to_name_raw[present_symbols[0]]
+        for s in present_symbols:
+            available_symbols_raw.remove(s)
+
+for s in available_symbols_raw:
+    available_symbols.append(s)
+    symbol_to_name[s] = symbol_to_name_raw[s]
+
 for symbol in available_symbols:
-    display_name = symbol_to_name.get(symbol, symbol)  # fallback au symbole si pas de nom
+    display_name = symbol_to_name.get(symbol, symbol) 
     stock_items.append(html.Div(
         display_name,
-        id={'type': 'stock-item', 'index': symbol},  # on garde le symbol pour le callback
+        id={'type': 'stock-item', 'index': symbol},  
         n_clicks=0,
         className="stock-item active" if symbol == "AAPL" else "stock-item"
     ))
@@ -128,7 +97,7 @@ layout = html.Div(className="actions-page", children=[
                     {'label': '3 ans', 'value': '3y'},
                     {'label': '5 ans', 'value': '5y'},
                 ],
-                value='6mo',
+                value='3mo',
                 className="lux-dropdown scrollable-dropdown"
             )
         ])
@@ -230,22 +199,67 @@ def update_graph_and_metrics(n, symbol, period):
     fig = go.Figure()
 
     metrics = []
-    ai_signal, ai_confidence, ai_backtest, ai_prediction = "N/A", "N/A", "N/A","N/A"
+    ai_signal, ai_actual, ai_backtest, ai_prediction = "N/A", "N/A", "N/A","N/A"
 
     if not symbol:
         fig.add_annotation(
             text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False
         )
-        return fig, [html.Div("Aucune action sélectionnée", className="metric-item error")]
+        return (
+            fig,
+            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
+            "N/A",
+            "metric-value",
+            "N/A",
+            "metric-value",
+            "N/A",
+            "N/A"
+        )
 
     ticker_symbol = symbol
+    for group_name, group_symbols in symbol_groups.items():
+        if symbol in group_symbols:
+            ticker_group = group_symbols  
+            break
+    else:
+        ticker_group = [symbol]  
     # Filtrer les données pour ce ticker
-    hist_graph = df_cleaned[df_cleaned["symbol"] == ticker_symbol].sort_values("date").copy()
+    all_data = []
+    batch_size = 1000
+    start = 0
+
+    while True:
+        response = supabase.table("historical_data") \
+            .select("date, open, high, low, close, volume") \
+            .in_("symbol", ticker_group) \
+            .order("date", desc=True) \
+            .range(start, start + batch_size - 1) \
+            .execute()
+        
+        if not response.data:
+            break
+        
+        all_data.extend(response.data)
+        start += batch_size
+
+    hist_graph = pd.DataFrame(all_data)
+    hist_graph["date"] = pd.to_datetime(hist_graph["date"])
+    hist_graph = hist_graph.drop_duplicates(subset=[ "date"], keep="first")
+
     if hist_graph.empty:
         fig.add_annotation(
             text=f"Aucune donnée pour {ticker_symbol}", x=0.5, y=0.5, showarrow=False
         )
-        return fig, [html.Div(f"Aucune donnée pour {ticker_symbol}", className="metric-item error")]
+        return (
+            fig,
+            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
+            "N/A",
+            "metric-value",
+            "N/A",
+            "metric-value",
+            "N/A",
+            "N/A"
+        )
 
     # Filtrage par période
     hist_graph = filter_period(hist_graph, period)
@@ -253,8 +267,16 @@ def update_graph_and_metrics(n, symbol, period):
         fig.add_annotation(
             text=f"Aucune donnée pour la période sélectionnée", x=0.5, y=0.5, showarrow=False
         )
-        return fig, [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")]
-
+        return (
+            fig,
+            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
+            "N/A",
+            "metric-value",
+            "N/A",
+            "metric-value",
+            "N/A",
+            "N/A"
+        )
     # Couleurs simples : vert pour hausse, rouge pour baisse
     increasing_color = "green"
     decreasing_color = "red"
@@ -262,10 +284,10 @@ def update_graph_and_metrics(n, symbol, period):
     # Ajout du graphique
     fig.add_trace(go.Candlestick(
         x=hist_graph["date"],
-        open=hist_graph["Open"],
-        high=hist_graph["High"],
-        low=hist_graph["Low"],
-        close=hist_graph["Close"],
+        open=hist_graph["open"],
+        high=hist_graph["high"],
+        low=hist_graph["low"],
+        close=hist_graph["close"],
         name=ticker_symbol,
         increasing_line_color=increasing_color,
         decreasing_line_color=decreasing_color,
@@ -273,12 +295,40 @@ def update_graph_and_metrics(n, symbol, period):
         decreasing_fillcolor="rgba(255,0,0,0.6)"
     ))
 
-    hist_metric = df_features[df_features["symbol"] == ticker_symbol].sort_values("date").copy()
+    all_data = []
+    start = 0
+    while True:
+        response = supabase.table("features") \
+            .select("*") \
+            .in_("symbol", ticker_group) \
+            .order("date", desc=True) \
+            .range(start, start + batch_size - 1) \
+            .execute()
+
+        if not response.data:
+            break
+        
+        all_data.extend(response.data)
+        start += batch_size
+
+    hist_metric = pd.DataFrame(all_data)
+    hist_metric["date"] = pd.to_datetime(hist_metric["date"])
+    hist_metric = hist_metric.drop_duplicates(subset=[ "date"], keep="first")
+
     if hist_metric.empty:
         fig.add_annotation(
             text=f"Aucune donnée pour {ticker_symbol}", x=0.5, y=0.5, showarrow=False
         )
-        return fig, [html.Div(f"Aucune donnée pour {ticker_symbol}", className="metric-item error")]
+        return (
+            fig,
+            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
+            "N/A",
+            "metric-value",
+            "N/A",
+            "metric-value",
+            "N/A",
+            "N/A"
+        )
 
     # Filtrage par période
     hist_metric = filter_period(hist_metric, period)
@@ -286,14 +336,26 @@ def update_graph_and_metrics(n, symbol, period):
         fig.add_annotation(
             text=f"Aucune donnée pour la période sélectionnée", x=0.5, y=0.5, showarrow=False
         )
-        return fig, [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")]
+        return (
+            fig,
+            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
+            "N/A",
+            "metric-value",
+            "N/A",
+            "metric-value",
+            "N/A",
+            "N/A"
+        )
 
     # Métriques
-    price = hist_metric["Close"].iloc[-1]
-    high = hist_metric["High"].iloc[-1]
-    low = hist_metric["Low"].iloc[-1]
-    volume = hist_metric["Volume"].iloc[-1]
-    yesterday_price = hist_metric["Close"].iloc[-2]
+    price = hist_metric["close_lag1"].iloc[-1]
+    high = hist_graph["high"].iloc[-1]
+    low = hist_graph["low"].iloc[-1]
+    volume = hist_graph["volume"].iloc[-1]
+    if len(hist_graph) < 2:
+        yesterday_price = hist_graph["close"].iloc[-1]
+    else:
+        yesterday_price = hist_graph["close"].iloc[-2]
     change_pct = (price - yesterday_price) / yesterday_price * 100
 
     change_class = "up" if change_pct >= 0 else "down"
@@ -334,12 +396,28 @@ def update_graph_and_metrics(n, symbol, period):
         )
     ])
 
-    ai_signal, ai_confidence, ai_backtest, ai_prediction = predict_lstm(hist_metric, symbol)
+    response = supabase.table("predictions") \
+        .select("*") \
+        .in_("symbol", ticker_group) \
+        .order("date", desc=True) \
+        .limit(1) \
+        .execute()
 
-    if(ai_signal == "Acheter"):
+    pred_df = pd.DataFrame(response.data)
+
+    if not pred_df.empty:
+        ai_signal = pred_df["signal"].iloc[0]
+        ai_prediction = pred_df["predicted_close"].iloc[0]
+        ai_actual = pred_df['actual_close'].iloc[0]
+        ai_backtest = "Gain moyen 6 mois : +3%"
+
+    signal_class = "metric-value"
+    predict_class = "metric-value"
+
+    if(ai_signal == "BUY"):
         signal_class = "metric-value up"
         predict_class = "metric-value up"
-    elif(ai_signal == "Vendre"):
+    elif(ai_signal == "SELL"):
         signal_class = "metric-value down"
         predict_class = "metric-value down"
     else:
@@ -357,4 +435,4 @@ def update_graph_and_metrics(n, symbol, period):
         height=500
     )
 
-    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_confidence, ai_backtest
+    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_actual, ai_backtest
