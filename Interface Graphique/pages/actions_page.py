@@ -108,6 +108,7 @@ layout = html.Div(className="actions-page", children=[
             #Signal du modèle
             html.Div(className="text-panel", children=[
                 html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
+                html.Br(),
                 dcc.Loading(
                     html.Table(
                         className="lux-table split-table",
@@ -131,9 +132,7 @@ layout = html.Div(className="actions-page", children=[
                     type= "circle",
                     color="white"
                 ),
-                # Backtest / Performance passée
-                html.H4("Performance passée", className="panel-title"),
-                html.Div(id="ai-backtest", className="metric-value", children="Chargement...", style={"margin-bottom": "24px"}) ,
+                html.Br(),html.Br(),html.Br(),
                 html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
             ]),
             
@@ -193,7 +192,6 @@ def select_single_stock(n_clicks, ids):
     Output('ai-predict', 'children'),
     Output('ai-predict', 'className'),
     Output('ai-actual', 'children'),
-    Output('ai-backtest', 'children'),
     Input('interval-graph-update', 'n_intervals'),
     Input("selected-stock", "data"),
     Input('period-dropdown', 'value'),
@@ -387,4 +385,4 @@ def update_graph_and_metrics(n, symbol, period):
         height=500
     )
 
-    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_actual, ai_backtest
+    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_actual
