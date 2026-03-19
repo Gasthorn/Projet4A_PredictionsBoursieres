@@ -203,6 +203,10 @@ def update_graph_and_metrics(n, symbol, period):
     metrics = []
     ai_signal, ai_actual, ai_backtest, ai_prediction = "N/A", "N/A", "N/A","N/A"
 
+    #constantes pour Bollinger
+    N = 20
+    K = 2
+
     if not symbol:
         fig.add_annotation(
             text="Aucune action sélectionnée", x=0.5, y=0.5, showarrow=False
@@ -284,6 +288,8 @@ def update_graph_and_metrics(n, symbol, period):
             "N/A",
             "N/A"
         )
+    
+    df = hist_graph.sort_values("date", ascending=True)
 
     # Filtrage par période
     hist_graph = filter_period(hist_graph, period)
@@ -305,6 +311,35 @@ def update_graph_and_metrics(n, symbol, period):
     increasing_color = "green"
     decreasing_color = "red"
 
+    #Bande de Bollinger
+    df["MA_20"] = df["close"].rolling(N).mean()
+    df["STD_20"] = df["close"].rolling(N).std()
+
+    df["BB_upper"] = df["MA_20"] + K * df["STD_20"]
+    df["BB_lower"] = df["MA_20"] - K * df["STD_20"]
+
+    df = df.sort_values("date", ascending=False)
+    df = filter_period(df, period)
+    # Bande supérieure
+    fig.add_trace(go.Scatter(
+        x=df["date"],
+        y=df["BB_upper"],
+        mode="lines",
+        line=dict(color="rgba(161,224,227,0.3)"),
+        name="Bollinger Upper",
+        showlegend=True
+    ))
+    # Bande inférieure + zone
+    fig.add_trace(go.Scatter(
+        x=df["date"],
+        y=df["BB_lower"],
+        mode="lines",
+        line=dict(color="rgba(161,224,227,0.3)"),
+        name="Bollinger Lower",
+        fill="tonexty",  # Remplit la zone jusqu'à la trace précédente (BB_upper)
+        fillcolor="rgba(161, 224, 227, 0.05)",  # bleu clair semi-transparent
+        showlegend=True
+    ))
     # Ajout du graphique
     fig.add_trace(go.Candlestick(
         x=hist_graph["date"],
