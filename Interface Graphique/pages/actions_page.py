@@ -248,6 +248,28 @@ def update_graph_and_metrics(n, symbol, period):
     hist_graph["date"] = pd.to_datetime(hist_graph["date"])
     hist_graph = hist_graph.drop_duplicates(subset=[ "date"], keep="first")
 
+    all_data = []
+    batch_size = 1000
+    start = 0
+
+    while True:
+        response = supabase.table("predictions") \
+            .select("*") \
+            .in_("symbol", ticker_group) \
+            .order("date", desc=True) \
+            .range(start, start + batch_size - 1) \
+            .execute()
+        
+        if not response.data:
+            break
+        
+        all_data.extend(response.data)
+        start += batch_size
+
+    pred_df = pd.DataFrame(all_data)
+    pred_df["date"] = pd.to_datetime(pred_df["date"])
+    pred_df = pred_df.drop_duplicates(subset=[ "date"], keep="first")
+
     if hist_graph.empty:
         fig.add_annotation(
             text=f"Aucune donnée pour {ticker_symbol}", x=0.5, y=0.5, showarrow=False
@@ -296,6 +318,18 @@ def update_graph_and_metrics(n, symbol, period):
         increasing_fillcolor="rgba(0,255,0,0.6)",
         decreasing_fillcolor="rgba(255,0,0,0.6)"
     ))
+    if not pred_df.empty:
+        ai_signal = pred_df["signal"].iloc[0]
+        ai_prediction = pred_df["predicted_close"].iloc[0]
+        ai_actual = hist_graph["close"].iloc[0]
+        fig.add_trace(go.Scatter(
+            x=pred_df["date"],
+            y=pred_df["predicted_close"],
+            mode="lines+markers",
+            name="Prédiction modèle",
+            line=dict(color="blue", dash="dash"),
+            marker=dict(size=4)
+        ))
 
     # Métriques
     price = hist_graph["close"].iloc[0]
@@ -345,21 +379,6 @@ def update_graph_and_metrics(n, symbol, period):
             ]
         )
     ])
-
-    response = supabase.table("predictions") \
-        .select("*") \
-        .in_("symbol", ticker_group) \
-        .order("date", desc=True) \
-        .limit(1) \
-        .execute()
-
-    pred_df = pd.DataFrame(response.data)
-
-    if not pred_df.empty:
-        ai_signal = pred_df["signal"].iloc[0]
-        ai_prediction = pred_df["predicted_close"].iloc[0]
-        ai_actual = hist_graph["close"].iloc[0]
-        ai_backtest = "Gain moyen 6 mois : +3%"
 
     signal_class = "metric-value"
     predict_class = "metric-value"
