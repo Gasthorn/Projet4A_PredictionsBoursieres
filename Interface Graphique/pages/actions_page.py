@@ -105,10 +105,10 @@ layout = html.Div(className="actions-page", children=[
     html.Div(className="actions-container", children=[
         html.Div(className="dual-panel-row",children=[
             # --- Recommandations (prédictions) ---
-            html.Div(className="ai-panel", children=[
-                #Signal du modèle
-                html.Div(className="text-panel", children=[
-                    html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
+            #Signal du modèle
+            html.Div(className="text-panel", children=[
+                html.H3("Prévisions de l'IA",className="panel-title", style={"padding-left": "36px"}),
+                dcc.Loading(
                     html.Table(
                         className="lux-table split-table",
                         children=[
@@ -116,28 +116,31 @@ layout = html.Div(className="actions-page", children=[
                                 html.Tr([
                                     html.Th("Signal"),
                                     html.Th("Prédiction"),
-                                    html.Th("Confiance"),
+                                    html.Th("Valeur réelle"),
                                 ])
                             ),
-                            html.Tbody([
-                                html.Tr([
-                                    html.Td(id="ai-signal", className="metric-value", children="Chargement..."),
-                                    html.Td(id="ai-predict", className="metric-value", children="Chargement..."),
-                                    html.Td(id="ai-confidence", className="metric-value", children="Chargement..."),
-                                ])
-                            ])
+                                html.Tbody([
+                                    html.Tr([
+                                        html.Td(id="ai-signal", className="metric-value", children="Chargement..."),
+                                        html.Td(id="ai-predict", className="metric-value", children="Chargement..."),
+                                        html.Td(id="ai-actual", className="metric-value", children="Chargement..."),
+                                    ])
+                                ]),
                         ]
                     ),
-                    # Backtest / Performance passée
-                    html.H4("Performance passée", className="panel-title"),
-                    html.Div(id="ai-backtest", className="metric-value", children="Chargement...", style={"margin-bottom": "24px"}) ,
-                    html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
-                ]),
+                    type= "circle",
+                    color="white"
+                ),
+                # Backtest / Performance passée
+                html.H4("Performance passée", className="panel-title"),
+                html.Div(id="ai-backtest", className="metric-value", children="Chargement...", style={"margin-bottom": "24px"}) ,
+                html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
             ]),
+            
             # === MÉTRIQUES EN TEMPS RÉEL ===
             html.Div(className="text-panel", children=[
                 html.H3("Résumé rapide : Top Stats", className="panel-title"),
-                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="cube")  
+                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="circle", color="white")  
             ])
         ]),
         # --- GRAPHIQUE ---
@@ -145,7 +148,8 @@ layout = html.Div(className="actions-page", children=[
             html.H3("Graphique des Prix", className="panel-title"),
             dcc.Loading(
                 dcc.Graph(id='stock-graph', className="lux-graph"),
-                type="dot"
+                type="circle",
+                color="white"
             ),
             dcc.Interval(
                 id='interval-graph-update',
@@ -188,7 +192,7 @@ def select_single_stock(n_clicks, ids):
     Output('ai-signal', 'className'),
     Output('ai-predict', 'children'),
     Output('ai-predict', 'className'),
-    Output('ai-confidence', 'children'),
+    Output('ai-actual', 'children'),
     Output('ai-backtest', 'children'),
     Input('interval-graph-update', 'n_intervals'),
     Input("selected-stock", "data"),
@@ -295,67 +299,15 @@ def update_graph_and_metrics(n, symbol, period):
         decreasing_fillcolor="rgba(255,0,0,0.6)"
     ))
 
-    all_data = []
-    start = 0
-    while True:
-        response = supabase.table("features") \
-            .select("*") \
-            .in_("symbol", ticker_group) \
-            .order("date", desc=True) \
-            .range(start, start + batch_size - 1) \
-            .execute()
-
-        if not response.data:
-            break
-        
-        all_data.extend(response.data)
-        start += batch_size
-
-    hist_metric = pd.DataFrame(all_data)
-    hist_metric["date"] = pd.to_datetime(hist_metric["date"])
-    hist_metric = hist_metric.drop_duplicates(subset=[ "date"], keep="first")
-
-    if hist_metric.empty:
-        fig.add_annotation(
-            text=f"Aucune donnée pour {ticker_symbol}", x=0.5, y=0.5, showarrow=False
-        )
-        return (
-            fig,
-            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
-            "N/A",
-            "metric-value",
-            "N/A",
-            "metric-value",
-            "N/A",
-            "N/A"
-        )
-
-    # Filtrage par période
-    hist_metric = filter_period(hist_metric, period)
-    if hist_metric.empty:
-        fig.add_annotation(
-            text=f"Aucune donnée pour la période sélectionnée", x=0.5, y=0.5, showarrow=False
-        )
-        return (
-            fig,
-            [html.Div("Aucune donnée pour la période sélectionnée", className="metric-item error")],
-            "N/A",
-            "metric-value",
-            "N/A",
-            "metric-value",
-            "N/A",
-            "N/A"
-        )
-
     # Métriques
-    price = hist_metric["close_lag1"].iloc[-1]
-    high = hist_graph["high"].iloc[-1]
-    low = hist_graph["low"].iloc[-1]
-    volume = hist_graph["volume"].iloc[-1]
+    price = hist_graph["close"].iloc[0]
+    high = hist_graph["high"].iloc[0]
+    low = hist_graph["low"].iloc[0]
+    volume = hist_graph["volume"].iloc[0]
     if len(hist_graph) < 2:
-        yesterday_price = hist_graph["close"].iloc[-1]
+        yesterday_price = hist_graph["close"].iloc[0]
     else:
-        yesterday_price = hist_graph["close"].iloc[-2]
+        yesterday_price = hist_graph["close"].iloc[1]
     change_pct = (price - yesterday_price) / yesterday_price * 100
 
     change_class = "up" if change_pct >= 0 else "down"
@@ -408,7 +360,7 @@ def update_graph_and_metrics(n, symbol, period):
     if not pred_df.empty:
         ai_signal = pred_df["signal"].iloc[0]
         ai_prediction = pred_df["predicted_close"].iloc[0]
-        ai_actual = pred_df['actual_close'].iloc[0]
+        ai_actual = hist_graph["close"].iloc[0]
         ai_backtest = "Gain moyen 6 mois : +3%"
 
     signal_class = "metric-value"
