@@ -182,7 +182,7 @@ layout = html.Div(className="actions-page", children=[
             ),
             dcc.Interval(
                 id='interval-graph-update',
-                interval=60*1000,
+                interval=3600*1000,
                 n_intervals=0
             )
         ]),
