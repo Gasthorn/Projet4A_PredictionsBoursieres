@@ -65,6 +65,33 @@ for symbol in available_symbols:
         className="stock-item active" if symbol == "AAPL" else "stock-item"
     ))
 
+def compute_performance(df):
+
+    df = df.sort_values("date", ascending=False)
+
+    horizons = {
+        "1j": 1,
+        "1s": 7,
+        "1m": 30,
+        "3m": 90,
+        "1y": 365,
+    }
+
+    latest_price = df["close"].iloc[0]
+
+    perf = {}
+
+    for label, days in horizons.items():
+        past = df[df["date"] <= df["date"].iloc[0] - pd.Timedelta(days=days)]
+
+        if past.empty:
+            perf[label] = None
+        else:
+            past_price = past["close"].iloc[0]
+            perf[label] = (latest_price - past_price) / past_price * 100
+
+    return perf
+
 # === LAYOUT ===
 layout = html.Div(className="actions-page", children=[
     #Store permettant la valeur par défaut du graph
@@ -132,14 +159,17 @@ layout = html.Div(className="actions-page", children=[
                     type= "circle",
                     color="white"
                 ),
-                html.Br(),html.Br(),html.Br(),
+                html.Br(),
+                html.Br(),html.Br(),
                 html.H3("Attention : Les prédictions ne constituent pas un conseil financier", className="panel-title"),
             ]),
             
             # === MÉTRIQUES EN TEMPS RÉEL ===
             html.Div(className="text-panel", children=[
                 html.H3("Résumé rapide : Top Stats", className="panel-title"),
-                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="circle", color="white")  
+                dcc.Loading(html.Div(id='live-metrics', className="metrics-grid"), type="circle", color="white"),
+                html.Br(),
+                dcc.Loading(html.Div(id='heatmap', className="heatmap-grid"), type="circle", color="white"),  
             ])
         ]),
         # --- GRAPHIQUE ---
@@ -192,6 +222,7 @@ def select_single_stock(n_clicks, ids):
     Output('ai-predict', 'children'),
     Output('ai-predict', 'className'),
     Output('ai-actual', 'children'),
+    Output('heatmap','children'),
     Input('interval-graph-update', 'n_intervals'),
     Input("selected-stock", "data"),
     Input('period-dropdown', 'value'),
@@ -290,6 +321,34 @@ def update_graph_and_metrics(n, symbol, period):
         )
     
     df = hist_graph.sort_values("date", ascending=True)
+    performance = compute_performance(hist_graph)
+    window = 50  # ajustable
+
+    resistance = df["high"].rolling(window).max().iloc[-1]
+    support = df["low"].rolling(window).min().iloc[-1]
+
+    sr_panel = html.Div(
+        className="heatmap-panel",
+        children=[
+            html.H3("Valeurs Max et Min sur 50j", className="panel-title"),
+
+            html.Div(
+                className="sr-row",
+                children=[
+
+                    html.Div(className="sr-box resistance", children=[
+                        html.Div("Maximum", className="sr-label"),
+                        html.Div(f"{resistance:,.2f}", className="sr-value")
+                    ]),
+
+                    html.Div(className="sr-box support", children=[
+                        html.Div("Minimum", className="sr-label"),
+                        html.Div(f"{support:,.2f}", className="sr-value")
+                    ])
+                ]
+            )
+        ]
+    )
 
     # Filtrage par période
     hist_graph = filter_period(hist_graph, period)
@@ -307,6 +366,39 @@ def update_graph_and_metrics(n, symbol, period):
             "N/A",
             "N/A"
         )
+    heatmap = html.Div(
+        className="heatmap-sr-container",
+        children=[
+
+            # Heatmap à gauche
+            html.Div(
+                className="heatmap-panel",
+                children=[
+                    html.H3("Performance", className="panel-title"),
+
+                    html.Div(
+                        className="heatmap-grid",
+                        children=[
+                            html.Div(
+                                className=f"heatmap-cell {'up' if v and v>0 else 'down'}",
+                                children=[
+                                    html.Div(k, className="heatmap-label"),
+                                    html.Div(
+                                        "N/A" if v is None else f"{v:+.1f}%",
+                                        className="heatmap-value"
+                                    )
+                                ]
+                            )
+                            for k, v in performance.items()
+                        ]
+                    )
+                ]
+            ),
+
+            # Support / Résistance à droite
+            sr_panel
+        ]
+    )
     # Couleurs simples : vert pour hausse, rouge pour baisse
     increasing_color = "green"
     decreasing_color = "red"
@@ -439,4 +531,4 @@ def update_graph_and_metrics(n, symbol, period):
         height=500
     )
 
-    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_actual
+    return fig, metrics, ai_signal,signal_class, ai_prediction,predict_class, ai_actual, heatmap
