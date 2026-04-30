@@ -2,28 +2,51 @@ from dash import html, dcc, Input, Output, State, callback, register_page,no_upd
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+from supabase import create_client
 
 register_page(__name__, path="/data", name="Data")
-df_features = pd.read_csv("Data/ALL_FEATURES.csv", parse_dates=["date"])
-
-symbol_to_name = {
-    "AAPL": "Apple",
-    "AMZN": "Amazon",
-    "BTC-USD": "Bitcoin",
-    "GOOGL": "Google",
-    "META": "Meta",
-    "MSFT": "Microsoft",
-    "NVDA": "NVIDIA",
-    "TSLA": "Tesla"
+url = "https://qeolwdccnegosrbldxqa.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFlb2x3ZGNjbmVnb3NyYmxkeHFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NjIxOTIsImV4cCI6MjA4MzQzODE5Mn0.BHFV2ANfkC3RP-_R-cyjp-8yKtQhsZhVWUmnGnuU9b4"
+supabase = create_client(url, key)
+symbol_groups = {
+    "BTC": ["BTC", "BTC-USD"],
+    # Ajouter d'autres regroupements si nécessaire
 }
 
-available_symbols = sorted(df_features["symbol"].unique())
 stock_items = []
+
+response = supabase.table("stocks") \
+    .select("symbol,name") \
+    .order("symbol") \
+    .execute()
+
+available_symbols_raw = []
+symbol_to_name_raw = {}
+
+for row in response.data:
+    available_symbols_raw.append(row["symbol"])
+    symbol_to_name_raw[row["symbol"]] = row["name"]
+
+available_symbols = []
+symbol_to_name = {}
+
+for group_name, group_symbols in symbol_groups.items():
+    present_symbols = [s for s in group_symbols if s in available_symbols_raw]
+    if present_symbols:
+        available_symbols.append(group_name)  
+        symbol_to_name[group_name] = symbol_to_name_raw[present_symbols[0]]
+        for s in present_symbols:
+            available_symbols_raw.remove(s)
+
+for s in available_symbols_raw:
+    available_symbols.append(s)
+    symbol_to_name[s] = symbol_to_name_raw[s]
+
 for symbol in available_symbols:
-    display_name = symbol_to_name.get(symbol, symbol)  # fallback au symbole si pas de nom
+    display_name = symbol_to_name.get(symbol, symbol) 
     stock_items.append(html.Div(
         display_name,
-        id={'type': 'stock-item', 'index': symbol},  # on garde le symbol pour le callback
+        id={'type': 'stock-item', 'index': symbol},  
         n_clicks=0,
         className="stock-item active" if symbol == "AAPL" else "stock-item"
     ))
@@ -46,24 +69,29 @@ layout = html.Div(className="data-page", children = [
     html.Div(className="text-panel", children=[
         html.H4("Données Utilisées", className="panel-title"),
         html.Div(className="table-container",children=[
-            html.Table(
-                className="lux-table split-table",
-                children=[
-                    html.Thead(
-                        html.Tr([
-                            html.Th("Date"),
-                            html.Th("Open"),
-                            html.Th("High"),
-                            html.Th("Low"),
-                            html.Th("Close"),
-                            html.Th("Volume"),
-                            html.Th("Volatility"),
-                            html.Th("RSI"),
-                            html.Th("MA 20"),
-                        ])
-                    ),
-                    html.Tbody(id="features-table-body")  ,
-                ]
+            dcc.Loading(
+                html.Table(
+                    className="lux-table split-table",
+                    children=[
+                        html.Thead(
+                            html.Tr([
+                                html.Th("Date"),
+                                html.Th("Open"),
+                                html.Th("High"),
+                                html.Th("Low"),
+                                html.Th("Close"),
+                                html.Th("Volume"),
+                                html.Th("Volatility"),
+                                html.Th("RSI"),
+                                html.Th("MA 5"),
+                                html.Th("MACD"),
+                            ])
+                        ),
+                        html.Tbody(id="features-table-body")  ,
+                    ]
+                ),
+                type= "circle",
+                color="white"
             )
         ]),
         
@@ -75,27 +103,29 @@ def generate_table_rows(df, max_rows=60):
     Génère les lignes HTML du tableau pour Dash.
     Arrondit certaines colonnes pour plus de lisibilité.
     """
-    df = df.tail(max_rows).copy().iloc[::-1]
+    df = df.head(max_rows).copy()
 
     # Arrondir les colonnes pour plus de lisibilité
-    for col in ["Open", "High", "Low", "Close", "MA_20"]:
+    for col in ["open", "high", "low", "close","ma_5"]:
         if col in df.columns:
             df[col] = df[col].round(2)
-    if "RSI_14" in df.columns:
-        df["RSI_14"] = df["RSI_14"].round(1)
-    if "Volume" in df.columns:
-        df["Volume"] = df["Volume"].astype(int)
+    if "rsi" in df.columns:
+        df["rsi"] = df["rsi"].round(1)
+    if "volatility" in df.columns:
+        df["volatility"] = df["volatility"].round(4)
+    if "macd" in df.columns:
+        df["macd"] = df["macd"].round(3)
+    if "volume" in df.columns:
+        df["volume"] = df["volume"].astype(int)
     if "date" in df.columns:
         df["date"] = df["date"].dt.date
-    if "volatility_10" in df.columns:
-        df["volatility_10"] = df["volatility_10"].round(4)
 
     rows = []
-    close_values = df["Close"].tolist() if "Close" in df.columns else []
+    close_values = df["close"].tolist() if "close" in df.columns else []
     for i, (_, row) in enumerate(df.iterrows()):
         if i < len(close_values) - 1:
             next_close = close_values[i + 1]
-            current_close = row["Close"]
+            current_close = row["close"]
             if current_close > next_close:
                 close_class = "metric-value up"
             elif current_close < next_close:
@@ -107,14 +137,15 @@ def generate_table_rows(df, max_rows=60):
         rows.append(
             html.Tr([
                 html.Td(row.get("date", "-")),
-                html.Td(f"{row.get('Open', '-')}$"),
-                html.Td(f"{row.get('High', '-')}$"),
-                html.Td(f"{row.get('Low', '-')}$"),
-                html.Td(f"{row.get('Close', '-')}$", className=close_class),
-                html.Td(row.get("Volume", "-")),
-                html.Td(row.get("volatility_10", "-")),
-                html.Td(row.get("RSI_14", "-")),
-                html.Td(row.get("MA_20", "-")),
+                html.Td(f"{row.get('open', '-')}$"),
+                html.Td(f"{row.get('high', '-')}$"),
+                html.Td(f"{row.get('low', '-')}$"),
+                html.Td(f"{row.get('close', '-')}$", className=close_class),
+                html.Td(row.get("volume", "-")),
+                html.Td(row.get("volatility", "-")),
+                html.Td(row.get("rsi", "-")),
+                html.Td(row.get("ma_5", "-")),
+                html.Td(row.get("macd", "-")),
             ])
         )
     return rows
@@ -128,13 +159,59 @@ def update_features_table(symbol):
     # Si symbol est None, on met AAPL par défaut
     if not symbol:
         symbol = "AAPL"
+    
+    ticker_symbol = symbol
+    for group_name, group_symbols in symbol_groups.items():
+        if symbol in group_symbols:
+            ticker_group = group_symbols  
+            break
+    else:
+        ticker_group = [symbol]  
 
-    # Filtrer le DataFrame pour ce symbole
-    df_symbol = df_features[df_features["symbol"] == symbol].sort_values("date")
-    if df_symbol.empty:
-        return [html.Tr([html.Td("Pas de données", colSpan=8)])]
+    all_data = []
+    batch_size = 1000
+    start = 0
+    while True:
+        response = supabase.table("historical_data") \
+            .select("date, open, high, low, close, volume") \
+            .in_("symbol", ticker_group) \
+            .order("date", desc=True) \
+            .range(start, start + batch_size - 1) \
+            .execute()
+        
+        if not response.data:
+            break
+        
+        all_data.extend(response.data)
+        start += batch_size
 
-    # Retourner les 60 dernières lignes
-    return generate_table_rows(df_symbol, max_rows=60)
+    df1 = pd.DataFrame(all_data)
+    df1["date"] = pd.to_datetime(df1["date"])
+    df1 = df1.drop_duplicates(subset=[ "date"], keep="first")
+
+    all_data = []
+    batch_size = 1000
+    start = 0
+    while True:
+        response = supabase.table("features") \
+            .select("date, ma_5, volatility, rsi, macd") \
+            .in_("symbol", ticker_group) \
+            .order("date", desc=True) \
+            .range(start, start + batch_size - 1) \
+            .execute()
+        
+        if not response.data:
+            break
+        
+        all_data.extend(response.data)
+        start += batch_size
+
+    df2 = pd.DataFrame(all_data)
+    df2["date"] = pd.to_datetime(df2["date"])
+    df2 = df2.drop_duplicates(subset=[ "date"], keep="first")
+
+    df = pd.merge(df1, df2, on="date", how="inner")
+
+    return generate_table_rows(df, max_rows=60)
 
 
