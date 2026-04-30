@@ -4,4 +4,7 @@ pandas
 numpy
 plotly
 tensorflow
-tensorflow.keras
+bcrypt
+opencv-python
+face_recognition
+dlib
