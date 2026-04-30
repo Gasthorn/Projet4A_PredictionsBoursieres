@@ -115,7 +115,7 @@ def update_layout(pathname, session):
         # === CONNECTÉ ===
         nav_links.extend([
             dcc.Link("Marchés", href="/actions_page", className="nav-link"),
-            dcc.Link("Analyse", href="/analysis", className="nav-link"),
+            dcc.Link("Analyse", href="/data", className="nav-link"),
             dcc.Link("Mon Suivi", href="/mon-suivi", className="nav-link"),
         ])
         
