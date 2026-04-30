@@ -545,12 +545,14 @@ body {
 /* ====================== STOCK BAR ====================== */
 .stock-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 14px;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
   position: relative;
   z-index: 10;
   padding-bottom: 6px;
+  scroll-behavior: smooth;
 }
 
 .stock-item {
@@ -2104,4 +2106,103 @@ body {
     .trades-summary {
         flex-wrap: wrap;
     }
+.text-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.heatmap-sr-container {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+
+.heatmap-cell {
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(255,255,255,0.05);
+}
+
+.heatmap-cell.up {
+  background: rgba(0,255,120,0.2);
+}
+
+.heatmap-cell.down {
+  background: rgba(255,60,60,0.2);
+}
+
+.heatmap-label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.heatmap-value {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.heatmap-sr-container {
+  display: flex;
+  gap: 20px;
+  align-items: stretch;
+  width: 100%;
+}
+
+/* Heatmap prend plus de place */
+.heatmap-panel {
+  flex: 2 1 0;
+}
+
+.sr-panel {
+  flex: 1 1 0;
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border-radius: 10px;
+  padding: 12px;
+
+  display: flex;
+  flex-direction: column;
+}
+
+/* Résistance */
+/* Ligne horizontale */
+.sr-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.sr-box {
+  flex: 1 1 0;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+/* Résistance rouge */
+.sr-box.resistance {
+  background: rgba(0, 255, 120, 0.2);
+}
+
+/* Support vert */
+.sr-box.support {
+  background: rgba(255, 60, 60, 0.2);
+}
+
+.sr-label {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.sr-value {
+  font-size: 20px;
+  font-weight: bold;
 }

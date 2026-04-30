@@ -8,3 +8,5 @@ bcrypt
 opencv-python
 face_recognition
 dlib
+psycopg2
+supabase
