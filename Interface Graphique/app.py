@@ -1,9 +1,25 @@
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State
 import yfinance as yf
+from services.database import init_db
+import logging
 
-# === INITIALISATION ===
-app = dash.Dash(__name__,use_pages=True, suppress_callback_exceptions=True, external_stylesheets=[  "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" ])
+# Supprimer les logs trop bavards
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
+# === INIT DATABASE ===
+init_db()
+
+# === INIT DASH ===
+app = dash.Dash(
+    __name__,
+    use_pages=True,
+    suppress_callback_exceptions=True,
+    external_stylesheets=[
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+    ]
+)
+
 app.title = "TradeLux - Plateforme de Trading"
 
 # === TICKERS ===
@@ -15,7 +31,6 @@ TICKERS = {
     "GOOGL": "GOOGL"
 }
 
-# === RÉCUPÉRATION DONNÉES ===
 def fetch_ticker_data():
     data = []
     for symbol, label in TICKERS.items():
@@ -28,93 +43,163 @@ def fetch_ticker_data():
                 change = (current - prev) / prev * 100
                 change_str = f"up {change:.2f}%" if change > 0 else f"down {abs(change):.2f}%"
                 change_class = "up" if change > 0 else "down"
-                data.append({"label": label, "value": f"{current:,.2f}", "change": change_str, "class": change_class})
+                data.append({
+                    "label": label,
+                    "value": f"{current:,.2f}",
+                    "change": change_str,
+                    "class": change_class
+                })
             else:
-                data.append({"label": label, "value": "N/A", "change": "down 0.0%", "class": "down"})
-        except:
-            data.append({"label": label, "value": "ERR", "change": "down 0.0%", "class": "down"})
+                data.append({
+                    "label": label,
+                    "value": "N/A",
+                    "change": "down 0.0%",
+                    "class": "down"
+                })
+        except Exception as e:
+            print(f"Erreur ticker {symbol}: {e}")
+            data.append({
+                "label": label,
+                "value": "ERR",
+                "change": "down 0.0%",
+                "class": "down"
+            })
     return data
 
-# === LAYOUT COMPLET (TOUT DEDANS) ===
+# === LAYOUT ===
 app.layout = html.Div([
-    # Fond animé
+
+    # Background (z-index négatif)
     html.Div(className="trade-bg"),
     html.Div(className="grid-lines"),
     html.Div([html.Div(className="particle") for _ in range(40)]),
 
-    # === OBLIGATOIRE : dcc.Interval + dcc.Location ===
+    # === COMPOSANTS CORE ===
     dcc.Location(id="url", refresh=False),
-    dcc.Interval(id="interval-component", interval=5*60*1000, n_intervals=0, disabled=True),
+    dcc.Store(id="session-store", storage_type="session"),
+    dcc.Interval(id="interval-component", interval=5*60*1000, n_intervals=0),
 
-    # Ticker
+    # === TICKER EN HAUT (z-index: 3000) ===
     html.Div(id="ticker-container"),
+    
+    # === NAVBAR (z-index: 2000) ===
+    html.Div(id="navbar-container"),
+    
+    # === PAGE CONTENT ===
+    dash.page_container
+])
 
-    # Navbar
-    html.Div(id="navbar", className="navbar", children=[
+# === LISTE DES PAGES PROTÉGÉES ===
+PROTECTED_PAGES = ["/actions_page", "/analysis", "/admin", "/mon-suivi"]
+
+# === CALLBACK PRINCIPAL : NAVBAR + TICKER + PROTECTION ===
+@app.callback(
+    Output("navbar-container", "children"),
+    Output("ticker-container", "children"),
+    Output("interval-component", "disabled"),
+    Input("url", "pathname"),
+    Input("session-store", "data"),
+)
+def update_layout(pathname, session):
+    is_logged_in = session is not None
+    is_home = pathname == "/"
+    
+    # === 1. CONSTRUCTION DE LA NAVBAR ===
+    # TOUJOURS visibles : Accueil, Témoignages
+    nav_links = [
+        dcc.Link("Accueil", href="/", className="nav-link"),
+        dcc.Link("Témoignages", href="/temoignages", className="nav-link"),
+    ]
+    
+    if is_logged_in:
+        # === CONNECTÉ ===
+        nav_links.extend([
+            dcc.Link("Marchés", href="/actions_page", className="nav-link"),
+            dcc.Link("Analyse", href="/analysis", className="nav-link"),
+            dcc.Link("Mon Suivi", href="/mon-suivi", className="nav-link"),
+        ])
+        
+        # Ajouter Admin si l'utilisateur est admin
+        if session and session.get("is_admin"):
+            print(f"👑 Lien admin ajouté pour {session.get('email')}")
+            nav_links.append(dcc.Link("Admin", href="/admin", className="nav-link"))
+        
+        # Ajouter le bouton Logout
+        nav_links.append(html.Button("Logout", id="logout-btn", className="nav-link"))
+        
+    else:
+        # === NON CONNECTÉ ===
+        nav_links.extend([
+            dcc.Link("Login", href="/login", className="nav-link"),
+            dcc.Link("Signup", href="/signup", className="nav-link"),
+        ])
+    
+    # Détermine la classe CSS de la navbar
+    navbar_class = "navbar with-ticker" if is_home and is_logged_in else "navbar no-ticker"
+    
+    navbar = html.Div(className=navbar_class, children=[
         html.Div(className="navbar-left", children=[
             html.Img(src="/assets/logo.png", className="logo", alt="Logo")
         ]),
-        html.Div(className="nav-links", children=[
-            dcc.Link("Accueil", href="/", className="nav-link"),
-            dcc.Link("Marchés", href="/actions_page", className="nav-link"),
-            dcc.Link("Analyse", href="/data", className="nav-link"),
-            html.A("Contact", href="#contact-section", className="nav-link", **{"data-scroll": ""}),
-        ]),
-    ]),
-
-    # Contenu principal avec animation
-    html.Div(id="page-content", className="page-content", children=[
-        html.Div(id="page-transition", children=dash.page_container)
+        html.Div(className="nav-links", children=nav_links)
     ])
-])
-
-# === CALLBACK PRINCIPAL : TOUT CONTRÔLE ===
-@app.callback(
-    Output("ticker-container", "children"),
-    Output("interval-component", "disabled"),
-    Output("navbar", "className"),
-    Output("page-content", "className"),
-    Output("page-transition", "className"),
-    Input("url", "pathname")
-)
-def control_layout(pathname):
-    if pathname == "/":
-        return (
-            html.Div(className="ticker-wrap", children=[
-                html.Div(id="ticker-inner", className="ticker-inner")
-            ]),
-            False,  # interval activé
-            "navbar with-ticker",
-            "page-content with-ticker",
-            "page-fade-in"
-        )
+    
+    # === 2. TICKER (seulement sur home ET connecté) ===
+    if is_home and is_logged_in:
+        ticker = html.Div(className="ticker-wrap", children=[
+            html.Div(id="ticker-inner", className="ticker-inner")
+        ])
+        interval_disabled = False
     else:
-        return (
-            "",  # pas de ticker
-            True,  # interval désactivé
-            "navbar no-ticker",
-            "page-content no-ticker",
-            "page-fade-in"
-        )
+        ticker = ""
+        interval_disabled = True
+    
+    return navbar, ticker, interval_disabled
 
-# === CALLBACK TICKER : FLUIDE INFINI ===
+# === CALLBACK TICKER ===
 @app.callback(
     Output("ticker-inner", "children"),
     Input("interval-component", "n_intervals")
 )
 def update_ticker(n):
     data = fetch_ticker_data()
-    items = [  
+    items = [
         html.Div(className="ticker-item", children=[
             html.Span(d["label"]),
             html.Span(className="ticker-value", children=d["value"]),
             html.Span(className=f"ticker-change {d['class']}", children=d["change"])
         ])
-        for symbol, d in zip(TICKERS.keys(), data)
+        for d in data
     ]
     ticker_set = html.Div(className="ticker-set", children=items)
-    return [ticker_set, ticker_set]  # 2x → boucle parfaite 
+    return [ticker_set, ticker_set]
+
+# === CALLBACK LOGOUT ===
+@app.callback(
+    Output("url", "pathname", allow_duplicate=True),
+    Output("session-store", "data", allow_duplicate=True),
+    Input("logout-btn", "n_clicks"),
+    prevent_initial_call=True
+)
+def logout(n_clicks):
+    if n_clicks:
+        return "/", None
+    return dash.no_update, dash.no_update
+
+# === CALLBACK REDIRECTION PAGES PROTÉGÉES ===
+@app.callback(
+    Output("url", "pathname", allow_duplicate=True),
+    Input("url", "pathname"),
+    State("session-store", "data"),
+    prevent_initial_call=True
+)
+def redirect_if_not_logged(pathname, session):
+    # Pages qui nécessitent une connexion
+    if pathname in PROTECTED_PAGES and session is None:
+        return "/login"
+    
+    return dash.no_update
 
 # === LANCEMENT ===
 if __name__ == "__main__":
-    app.run( port=7860, debug=True)
+    app.run(port=7860, debug=True)

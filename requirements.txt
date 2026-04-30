@@ -3,5 +3,10 @@ yfinance
 pandas
 numpy
 plotly
+tensorflow
+bcrypt
+opencv-python
+face_recognition
+dlib
 psycopg2
 supabase
