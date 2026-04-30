@@ -2110,6 +2110,7 @@ body {
   flex: 1;
   min-width: 0;
 }
+}
 
 .heatmap-sr-container {
   display: flex;
