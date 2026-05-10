@@ -2,7 +2,7 @@ import sqlite3
 import bcrypt
 from services.database import get_connection
 
-def create_user(email, password, face_image=None, is_admin=0):
+def create_user(email, password, face_image=None, prenom=None, nom=None, telephone=None, is_admin=0):
     """Crée un utilisateur normal (admin=0 par défaut)"""
     conn = get_connection()
     cursor = conn.cursor()
@@ -15,17 +15,17 @@ def create_user(email, password, face_image=None, is_admin=0):
             print(f" Email déjà existant: {email}")
             conn.close()
             return False
-        
+
         cursor.execute(
-            "INSERT INTO users (email, password, face_image, is_admin) VALUES (?, ?, ?, ?)",
-            (email, hashed, face_image, is_admin)
+            "INSERT INTO users (email, password, face_image, prenom, nom, telephone, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (email, hashed, face_image, prenom, nom, telephone, is_admin)
         )
         conn.commit()
-        
+
         print(f" Utilisateur créé: {email} (admin: {is_admin})")
         conn.close()
         return True
-        
+
     except Exception as e:
         print(f" Erreur création: {e}")
         conn.close()
@@ -49,18 +49,74 @@ def get_user_by_email(email):
     """Récupère les infos d'un utilisateur"""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, email, is_admin, face_image FROM users WHERE email=?", (email,))
+    cursor.execute(
+        "SELECT id, email, is_admin, face_image, prenom, nom, telephone, created_at, public_stats, COALESCE(is_online, 0) FROM users WHERE email=?",
+        (email,)
+    )
     result = cursor.fetchone()
     conn.close()
-    
+
     if result:
         return {
             "id": result[0],
             "email": result[1],
             "is_admin": result[2],
-            "face_image": result[3]
+            "face_image": result[3],
+            "prenom": result[4] or "",
+            "nom": result[5] or "",
+            "telephone": result[6] or "",
+            "created_at": result[7] or "",
+            "public_stats": bool(result[8]),
+            "is_online": bool(result[9]),
         }
     return None
+
+
+def set_online_status(email, value: bool):
+    """Active ou désactive le statut en ligne de l'utilisateur"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET is_online = ? WHERE email = ?", (1 if value else 0, email))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erreur set_online_status: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def set_public_stats(email, value: bool):
+    """Active ou désactive la visibilité publique des stats de l'utilisateur"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("UPDATE users SET public_stats = ? WHERE email = ?", (1 if value else 0, email))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erreur set_public_stats: {e}")
+        return False
+    finally:
+        conn.close()
+
+def update_user_profile(email, prenom, nom, telephone):
+    """Met à jour les informations de profil d'un utilisateur"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET prenom=?, nom=?, telephone=? WHERE email=?",
+            (prenom, nom, telephone, email)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f" Erreur mise à jour profil: {e}")
+        return False
+    finally:
+        conn.close()
 
 def is_admin(email):
     """Vérifie si un utilisateur est admin"""

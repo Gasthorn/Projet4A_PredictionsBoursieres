@@ -1,0 +1,1576 @@
+/* ================================================================
+   SUIVI.CSS — Page "Mon Suivi" ENSIM
+   Thème : glassmorphism cyan neon, cohérent avec le reste du site
+   ================================================================ */
+
+/* ── Variables ── */
+:root {
+  --cyan: #00f0ff;
+  --cyan-dim: rgba(0, 240, 255, 0.18);
+  --cyan-glow: 0 0 18px rgba(0, 240, 255, 0.35);
+  --green: #00ff87;
+  --green-dim: rgba(0, 255, 135, 0.15);
+  --red: #ff4d6d;
+  --red-dim: rgba(255, 77, 109, 0.15);
+  --orange: #ffb347;
+  --bg: #010214;
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text: #e0e8ff;
+  --text-muted: #7a8aaa;
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+/* ── Page wrapper ── */
+.suivi-page {
+  min-height: 100vh;
+  padding-top: 90px;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  color: var(--text);
+}
+
+/* ================================================================
+   HERO
+   ================================================================ */
+.suivi-hero {
+  text-align: center;
+  padding: 56px 24px 40px;
+  position: relative;
+}
+
+.suivi-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 50px;
+  padding: 6px 18px;
+  font-size: 0.72rem;
+  letter-spacing: 2.5px;
+  color: var(--cyan);
+  margin-bottom: 24px;
+  text-transform: uppercase;
+}
+
+.suivi-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  animation: suivi-pulse 1.6s infinite;
+}
+
+@keyframes suivi-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.75); }
+}
+
+.suivi-title {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -1px;
+  background: linear-gradient(135deg, #fff 30%, var(--cyan) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 16px;
+}
+
+.suivi-neon-line {
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  margin: 0 auto 20px;
+  border-radius: 2px;
+}
+
+.suivi-hero-sub {
+  color: var(--text-muted);
+  font-size: 1rem;
+  max-width: 560px;
+  margin: 0 auto 14px;
+  line-height: 1.6;
+}
+
+.suivi-welcome-text {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--cyan);
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+/* ================================================================
+   MAIN CONTAINER
+   ================================================================ */
+.suivi-main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
+
+/* ================================================================
+   KPI ROW
+   ================================================================ */
+.suivi-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 48px;
+}
+
+@media (max-width: 900px) { .suivi-kpi-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .suivi-kpi-row { grid-template-columns: 1fr; } }
+
+.suivi-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 22px 20px;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.suivi-kpi-card:hover {
+  border-color: var(--cyan-dim);
+  box-shadow: var(--cyan-glow);
+}
+
+.suivi-kpi-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--cyan-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cyan);
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.suivi-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.suivi-kpi-lbl {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.suivi-kpi-val {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.suivi-kpi-pos { color: var(--green) !important; }
+.suivi-kpi-neg { color: var(--red) !important; }
+
+.suivi-kpi-detail {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ================================================================
+   SECTION
+   ================================================================ */
+.suivi-section {
+  margin-bottom: 52px;
+}
+
+.suivi-section-hdr {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.suivi-section-hdr > div {
+  flex: 1;
+}
+
+.suivi-num {
+  font-size: 3.5rem;
+  font-weight: 900;
+  color: var(--cyan-dim);
+  line-height: 1;
+  flex-shrink: 0;
+  border-right: 2px solid var(--glass-border);
+  padding-right: 20px;
+  min-width: 64px;
+}
+
+.suivi-section-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.suivi-section-sub {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.suivi-export-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--cyan);
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+.suivi-export-btn:hover {
+  background: rgba(0, 240, 255, 0.18);
+  box-shadow: var(--cyan-glow);
+  transform: translateY(-1px);
+}
+
+/* ── Ticker dropdown in section header ── */
+.suivi-ticker-dd {
+  min-width: 220px;
+}
+
+/* Fix fond blanc Dash : le parent wrapper porte le fond sombre,
+   le Select-control est transparent pour laisser voir le parent */
+#suivi-ticker-select .Select-control,
+#suivi-ticker-select .Select-control .Select-multi-value-wrapper,
+#suivi-ticker-select .Select-control .Select-value-wrapper,
+.suivi-ticker-dd .Select-control,
+.suivi-ticker-dd .Select-control .Select-multi-value-wrapper {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Tous les enfants — reset fond blanc par défaut */
+.suivi-ticker-dd *,
+.suivi-ticker-dd *:before,
+.suivi-ticker-dd *:after {
+  box-sizing: border-box;
+}
+
+/* Conteneur Select principal */
+.suivi-ticker-dd .Select,
+.suivi-ticker-dd .Select.is-focused,
+.suivi-ticker-dd .Select.is-open {
+  background: transparent !important;
+}
+
+.suivi-ticker-dd .Select-control,
+div.suivi-ticker-dd div.Select-control {
+  background-color: rgba(5, 15, 40, 0.92) !important;
+  background: rgba(5, 15, 40, 0.92) !important;
+  border: 1px solid rgba(0, 240, 255, 0.3) !important;
+  border-radius: 10px !important;
+  color: #eaf6ff !important;
+  box-shadow: none !important;
+  cursor: pointer !important;
+}
+
+.suivi-ticker-dd .Select-control:hover {
+  border-color: rgba(0, 240, 255, 0.6) !important;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.15) !important;
+}
+
+/* Wrapper de la valeur */
+.suivi-ticker-dd .Select-multi-value-wrapper,
+.suivi-ticker-dd .Select-value-wrapper {
+  background: transparent !important;
+}
+
+/* Valeur sélectionnée + placeholder */
+.suivi-ticker-dd .Select-value,
+.suivi-ticker-dd .Select-value-label,
+.suivi-ticker-dd .Select-placeholder {
+  color: #b8dff0 !important;
+  background: transparent !important;
+  line-height: 38px !important;
+}
+
+.suivi-ticker-dd .Select-placeholder {
+  color: #4a5c7a !important;
+}
+
+/* Zone de saisie texte */
+.suivi-ticker-dd .Select-input,
+.suivi-ticker-dd .Select-input > input {
+  color: #eaf6ff !important;
+  background: transparent !important;
+}
+
+/* Flèche */
+.suivi-ticker-dd .Select-arrow-zone,
+.suivi-ticker-dd .Select-arrow-zone:hover {
+  background: transparent !important;
+}
+.suivi-ticker-dd .Select-arrow {
+  border-top-color: #4a5c7a !important;
+  border-width: 5px 4px 0 !important;
+}
+.suivi-ticker-dd .is-open > .Select-control .Select-arrow {
+  border-color: transparent transparent #00f0ff !important;
+  border-width: 0 4px 5px !important;
+}
+
+/* Menu déroulant */
+.suivi-ticker-dd .Select-menu-outer {
+  background-color: rgba(4, 10, 32, 0.98) !important;
+  border: 1px solid rgba(0, 240, 255, 0.2) !important;
+  border-radius: 10px !important;
+  margin-top: 4px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.65) !important;
+  z-index: 9999 !important;
+}
+
+.suivi-ticker-dd .Select-menu {
+  background-color: transparent !important;
+  border-radius: 10px !important;
+}
+
+/* Options */
+.suivi-ticker-dd .Select-option {
+  background-color: transparent !important;
+  color: #b8dff0 !important;
+  font-size: 0.85rem !important;
+  padding: 10px 14px !important;
+}
+
+.suivi-ticker-dd .Select-option.is-focused {
+  background-color: rgba(0, 240, 255, 0.08) !important;
+  color: #eaf6ff !important;
+}
+
+.suivi-ticker-dd .Select-option.is-selected {
+  background-color: rgba(0, 240, 255, 0.14) !important;
+  color: #00f0ff !important;
+  font-weight: 600 !important;
+}
+
+.suivi-ticker-dd .Select-noresults {
+  background: transparent !important;
+  color: #4a5c7a !important;
+}
+
+/* ── Performance chart wrapper ── */
+#suivi-perf-chart .js-plotly-plot {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .suivi-section-hdr {
+    flex-wrap: wrap;
+  }
+
+  .suivi-export-btn {
+    width: 100%;
+  }
+}
+
+/* ================================================================
+   PREDICTION GRID
+   ================================================================ */
+.suivi-pred-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.suivi-loading {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px;
+  font-style: italic;
+}
+
+/* ── Prediction Card ── */
+.suivi-pred-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  transition: border-color 0.25s, transform 0.2s, box-shadow 0.25s;
+}
+
+.suivi-pred-card:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(0, 240, 255, 0.12);
+}
+
+.suivi-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.suivi-card-id {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.suivi-card-ticker {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.5px;
+}
+
+.suivi-card-name {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Signal badges */
+.suivi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 50px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.suivi-badge-bull {
+  background: rgba(0, 255, 135, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(0, 255, 135, 0.3);
+}
+
+.suivi-badge-bear {
+  background: rgba(255, 77, 109, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(255, 77, 109, 0.3);
+}
+
+.suivi-badge-neutral {
+  background: rgba(120, 120, 120, 0.15);
+  color: #aaa;
+  border: 1px solid rgba(120, 120, 120, 0.25);
+}
+
+/* Small badge (history table) */
+.suivi-badge-sm {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 50px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+/* ── Prices row ── */
+.suivi-card-prices {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.suivi-price-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.suivi-price-lbl {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.suivi-price-val {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.suivi-price-sub {
+  font-size: 0.6rem;
+  color: rgba(122, 138, 170, 0.6);
+  font-style: italic;
+  margin-top: 1px;
+}
+
+.suivi-price-arrow {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.suivi-price-change {
+  margin-left: auto;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.suivi-pos { color: var(--green); background: var(--green-dim); }
+.suivi-neg { color: var(--red);   background: var(--red-dim);   }
+
+/* ── Confidence bar ── */
+.suivi-conf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.suivi-conf-lbl {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.suivi-conf-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.suivi-conf-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), #00a8ff);
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+.suivi-conf-pct {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cyan);
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ── ACHAT / VENTE operation badge ── */
+.suivi-op-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.suivi-op-buy {
+  background: rgba(0, 255, 135, 0.1);
+  border: 1px solid rgba(0, 255, 135, 0.35);
+  color: #00ff87;
+}
+
+.suivi-op-sell {
+  background: rgba(255, 77, 109, 0.1);
+  border: 1px solid rgba(255, 77, 109, 0.35);
+  color: #ff4d6d;
+}
+
+/* ── Date / validity row ── */
+.suivi-date-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 0 10px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.suivi-date-row .fa-clock {
+  color: var(--cyan);
+  opacity: 0.7;
+  font-size: 0.7rem;
+}
+
+.suivi-date-valid {
+  color: #b8dff0;
+  font-weight: 500;
+}
+
+.suivi-date-horizon {
+  margin-left: auto;
+  font-size: 0.67rem;
+  color: rgba(0, 240, 255, 0.5);
+  font-style: italic;
+}
+
+/* ── Card footer ── */
+.suivi-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.suivi-card-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.suivi-sim-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.suivi-sim-btn:hover {
+  background: rgba(0, 240, 255, 0.28);
+  box-shadow: var(--cyan-glow);
+}
+
+/* ── Two-button footer layout ── */
+.suivi-card-btns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Évolution button ── */
+.suivi-evo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(0, 255, 135, 0.07);
+  color: #00ff87;
+  border: 1px solid rgba(0, 255, 135, 0.3);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.suivi-evo-btn:hover {
+  background: rgba(0, 255, 135, 0.18);
+  box-shadow: 0 0 14px rgba(0, 255, 135, 0.2);
+}
+
+/* ── Tooltip cursor-following (suivi cards) ── */
+.suivi-pred-card {
+  position: relative;
+  overflow: visible;
+}
+
+.suivi-pred-tooltip {
+  position: absolute;
+  width: 300px;
+  background: rgba(2, 6, 22, 1);
+  backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(0, 240, 255, 0.35);
+  border-radius: 14px;
+  padding: 16px 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.9), 0 0 20px rgba(0,240,255,0.12);
+}
+
+/* opacity géré par tooltip.js */
+
+.suivi-pred-tooltip-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.suivi-pred-tooltip-title {
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.suivi-pred-tooltip-company {
+  font-size: 0.68rem;
+  color: rgba(180, 210, 255, 0.45);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.suivi-pred-tooltip-body {
+  font-size: 0.82rem;
+  color: rgba(200, 225, 255, 0.82);
+  line-height: 1.55;
+  margin: 0 0 6px 0;
+}
+
+.suivi-pred-tooltip-prices {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  background: rgba(0, 240, 255, 0.06);
+  border: 1px solid rgba(0, 240, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 10px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.suivi-pred-tooltip-price-item {
+  color: rgba(200, 230, 255, 0.8);
+  white-space: nowrap;
+}
+
+.suivi-pred-tooltip-footer {
+  margin-top: 8px;
+  font-size: 0.68rem;
+  color: rgba(0, 240, 255, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid rgba(0, 240, 255, 0.1);
+  padding-top: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+/* ================================================================
+   HISTORY TABLE
+   ================================================================ */
+.suivi-history {}
+
+.suivi-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  background: var(--glass);
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius);
+}
+
+.suivi-empty-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  margin-top: 8px;
+}
+
+.suivi-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+}
+
+.suivi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.suivi-table thead tr {
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.suivi-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+
+.suivi-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  vertical-align: middle;
+}
+
+.suivi-table tbody tr:last-child td { border-bottom: none; }
+
+.suivi-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.suivi-td-ticker {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+}
+
+.suivi-td-pos { color: var(--green); font-weight: 600; }
+.suivi-td-neg { color: var(--red);   font-weight: 600; }
+
+/* ================================================================
+   MODAL
+   ================================================================ */
+.suivi-modal-hidden {
+  display: none;
+}
+
+.suivi-modal-visible {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  inset: 0;
+  z-index: 6000;
+  background: rgba(1, 2, 20, 0.8);
+  backdrop-filter: blur(8px);
+  padding: 20px;
+  animation: suivi-fade-in 0.2s ease;
+}
+
+@keyframes suivi-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.suivi-modal {
+  background: #060d20;
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7), 0 0 60px rgba(0, 240, 255, 0.08);
+  animation: suivi-slide-up 0.25s ease;
+}
+
+@keyframes suivi-slide-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── Modal header ── */
+.suivi-modal-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.suivi-modal-ticker-txt {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.suivi-modal-name-txt {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.suivi-close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  transition: background 0.2s, color 0.2s;
+}
+
+.suivi-close-btn:hover {
+  background: rgba(255, 77, 109, 0.15);
+  color: var(--red);
+  border-color: rgba(255, 77, 109, 0.3);
+}
+
+/* ── Modal body ── */
+.suivi-modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.suivi-modal-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.suivi-modal-signal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.suivi-modal-lbl {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.suivi-modal-conf {
+  font-size: 0.78rem;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  padding: 3px 10px;
+  border-radius: 50px;
+}
+
+.suivi-modal-prices-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.suivi-mpi {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.suivi-modal-price {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.suivi-modal-arrow {
+  color: var(--text-muted);
+}
+
+.suivi-modal-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
+/* ── Amount input ── */
+.suivi-amount-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suivi-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.suivi-input-grp {
+  position: relative;
+  display: block;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.suivi-input-grp:focus-within {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.12);
+}
+
+.suivi-input-euro {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 56px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.suivi-input {
+  width: 100%;
+  height: 52px;
+  display: block;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 0 18px 0 78px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+}
+
+.suivi-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+.suivi-input::-webkit-outer-spin-button,
+.suivi-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.suivi-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ── Simulation result ── */
+.suivi-sim-box {
+  border-radius: var(--radius-sm);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: suivi-fade-in 0.2s ease;
+}
+
+.suivi-sim-gain {
+  background: rgba(0, 255, 135, 0.06);
+  border: 1px solid rgba(0, 255, 135, 0.25);
+}
+
+.suivi-sim-loss {
+  background: rgba(255, 77, 109, 0.06);
+  border: 1px solid rgba(255, 77, 109, 0.25);
+}
+
+.suivi-sim-neutral {
+  background: rgba(120, 120, 120, 0.08);
+  border: 1px solid rgba(120, 120, 120, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  color: #aaa;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.suivi-sim-error {
+  color: var(--red);
+  font-size: 0.85rem;
+  padding: 10px 14px;
+  background: var(--red-dim);
+  border-radius: var(--radius-sm);
+}
+
+.suivi-sim-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.suivi-sim-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.suivi-sim-lbl {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.suivi-sim-values {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.suivi-sim-pnl {
+  font-size: 2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.suivi-sim-gain .suivi-sim-pnl { color: var(--green); }
+.suivi-sim-loss .suivi-sim-pnl { color: var(--red); }
+
+.suivi-sim-pct {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.suivi-sim-gain .suivi-sim-pct { color: rgba(0, 255, 135, 0.7); }
+.suivi-sim-loss .suivi-sim-pct { color: rgba(255, 77, 109, 0.7); }
+
+.suivi-sim-details {
+  display: flex;
+  gap: 20px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.suivi-sim-details span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suivi-sim-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Sélecteur ACHAT / VENTE ── */
+.suivi-action-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.suivi-action-btns {
+  display: flex;
+  gap: 10px;
+}
+
+.suivi-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.22s ease;
+  font-family: inherit;
+}
+
+.suivi-action-buy.active {
+  background: rgba(0,255,135,0.1);
+  border-color: rgba(0,255,135,0.45);
+  color: #00ff87;
+  box-shadow: 0 0 16px rgba(0,255,135,0.12);
+}
+
+.suivi-action-sell.active {
+  background: rgba(255,77,109,0.1);
+  border-color: rgba(255,77,109,0.45);
+  color: #ff4d6d;
+  box-shadow: 0 0 16px rgba(255,77,109,0.12);
+}
+
+.suivi-action-buy:not(.active):hover {
+  background: rgba(0,255,135,0.06);
+  border-color: rgba(0,255,135,0.25);
+  color: #00ff87;
+}
+
+.suivi-action-sell:not(.active):hover {
+  background: rgba(255,77,109,0.06);
+  border-color: rgba(255,77,109,0.25);
+  color: #ff4d6d;
+}
+
+.suivi-action-hint {
+  min-height: 18px;
+}
+
+.suivi-action-hint-inner {
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suivi-hint-ok   { color: #00ff87; }
+.suivi-hint-warn { color: #f59e0b; }
+
+/* ── Modal buttons ── */
+.suivi-modal-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.suivi-btn-green {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  background: linear-gradient(135deg, rgba(0, 255, 135, 0.2), rgba(0, 200, 100, 0.15));
+  color: var(--green);
+  border: 1px solid rgba(0, 255, 135, 0.4);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+.suivi-btn-green:hover {
+  background: rgba(0, 255, 135, 0.28);
+  box-shadow: 0 4px 20px rgba(0, 255, 135, 0.2);
+  transform: translateY(-1px);
+}
+
+.suivi-btn-ghost {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 20px;
+  background: var(--glass);
+  color: var(--text-muted);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.suivi-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
+/* ── Feedback ── */
+.suivi-feedback-err {
+  color: var(--red);
+  font-size: 0.82rem;
+  text-align: center;
+  padding: 8px;
+  background: var(--red-dim);
+  border-radius: 8px;
+}
+
+/* ================================================================
+   SCROLLBAR
+   ================================================================ */
+.suivi-modal::-webkit-scrollbar { width: 5px; }
+.suivi-modal::-webkit-scrollbar-track { background: transparent; }
+.suivi-modal::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 3px; }
+
+/* ================================================================
+   TRUST BANNER
+   ================================================================ */
+.suivi-trust-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: linear-gradient(135deg, rgba(0,240,255,0.06), rgba(0,255,135,0.04));
+  border: 1px solid rgba(0,240,255,0.18);
+  border-radius: var(--radius);
+  padding: 20px 28px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.suivi-trust-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.suivi-trust-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(0,240,255,0.1);
+  border: 1px solid rgba(0,240,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #00f0ff;
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.suivi-trust-left strong {
+  color: #eaf6ff;
+  font-size: 0.95rem;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.suivi-trust-left p {
+  color: #7a8aaa;
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.suivi-trust-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  background: rgba(0,240,255,0.1);
+  border: 1px solid rgba(0,240,255,0.35);
+  border-radius: 10px;
+  color: #00f0ff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+.suivi-trust-btn:hover {
+  background: rgba(0,240,255,0.2);
+  box-shadow: 0 0 22px rgba(0,240,255,0.25);
+  transform: translateY(-1px);
+}
+
+/* ================================================================
+   BACKTEST MODAL
+   ================================================================ */
+.suivi-backtest-modal {
+  background: linear-gradient(145deg, rgba(5,12,35,0.98), rgba(3,8,22,0.99));
+  border: 1px solid rgba(0,240,255,0.2);
+  border-radius: 24px;
+  padding: 32px;
+  width: 92%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.suivi-backtest-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.suivi-backtest-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #00f0ff;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.suivi-backtest-title {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #eaf6ff;
+  margin: 0 0 6px;
+}
+
+.suivi-backtest-sub {
+  font-size: 0.82rem;
+  color: #7a8aaa;
+  margin: 0;
+}
+
+.suivi-backtest-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.suivi-bt-recalc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(0,240,255,0.15), rgba(0,240,255,0.08));
+  border: 1px solid rgba(0,240,255,0.35);
+  border-radius: 10px;
+  color: #00f0ff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.suivi-bt-recalc-btn:hover {
+  background: rgba(0,240,255,0.22);
+  box-shadow: 0 0 14px rgba(0,240,255,0.25);
+}
+
+.suivi-bt-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: rgba(0,240,255,0.05);
+  border: 1px solid rgba(0,240,255,0.18);
+  border-left: 3px solid #00f0ff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 0.9rem;
+  color: #b8dff0;
+  line-height: 1.6;
+}
+.suivi-bt-summary i {
+  color: #00f0ff;
+  font-size: 1.1rem;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Stats grid ── */
+.suivi-bt-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+}
+
+.suivi-bt-stat {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.suivi-bt-stat-main {
+  background: rgba(0,240,255,0.05);
+  border-color: rgba(0,240,255,0.2);
+}
+
+.suivi-bt-slbl {
+  font-size: 0.68rem;
+  color: #7a8aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.suivi-bt-sval {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-family: 'SF Mono', monospace;
+  color: #eaf6ff;
+}
+
+.suivi-bt-sdiff {
+  font-size: 0.75rem;
+  color: #7a8aaa;
+  font-weight: 500;
+}
+
+.suivi-bt-pos { color: #00ff87 !important; }
+.suivi-bt-neg { color: #ff4d6d !important; }
+.suivi-bt-buy { background: rgba(0,255,135,0.1); border-color: rgba(0,255,135,0.35); color: #00ff87; }
+.suivi-bt-sell { background: rgba(255,77,109,0.1); border-color: rgba(255,77,109,0.35); color: #ff4d6d; }
+
+.suivi-bt-trades-wrap { margin-top: 4px; }
+
+.suivi-bt-trades-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #b8dff0;
+  margin: 0 0 12px;
+}
+
+.suivi-bt-no-trades {
+  text-align: center;
+  color: #7a8aaa;
+  font-size: 0.83rem;
+  padding: 20px;
+  font-style: italic;
+}

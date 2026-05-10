@@ -24,6 +24,9 @@ def init_db():
             password BLOB NOT NULL,
             face_image TEXT,
             is_admin INTEGER DEFAULT 0,
+            prenom TEXT,
+            nom TEXT,
+            telephone TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -56,7 +59,32 @@ def init_db():
             cursor.execute("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
             conn.commit()
             print("✅ Migration created_at réussie")
-        
+
+        if 'prenom' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN prenom TEXT")
+            conn.commit()
+            print("✅ Migration prenom réussie")
+
+        if 'nom' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN nom TEXT")
+            conn.commit()
+            print("✅ Migration nom réussie")
+
+        if 'telephone' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN telephone TEXT")
+            conn.commit()
+            print("✅ Migration telephone réussie")
+
+        if 'public_stats' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN public_stats INTEGER DEFAULT 0")
+            conn.commit()
+            print("✅ Migration public_stats réussie")
+
+        if 'is_online' not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN is_online INTEGER DEFAULT 0")
+            conn.commit()
+            print("✅ Migration is_online réussie")
+
         print("📦 Table users déjà existante, conservation des données")
         ensure_admin_exists(conn)
 
@@ -126,7 +154,7 @@ def create_default_admin(conn):
     """Crée un admin par défaut"""
     cursor = conn.cursor()
     
-    default_email = "admin@tradelux.com"
+    default_email = "admin@ensim.com"
     default_password = "Admin123!"
     
     hashed = bcrypt.hashpw(default_password.encode(), bcrypt.gensalt())
@@ -137,7 +165,7 @@ def create_default_admin(conn):
             (default_email, hashed, 1)
         )
         conn.commit()
-        print("👑 Admin par défaut créé: admin@tradelux.com / Admin123!")
+        print("👑 Admin par défaut créé: admin@ensim.com / Admin123!")
         print("⚠️  CHANGE CE MOT DE PASSE DÈS QUE POSSIBLE !")
     except sqlite3.IntegrityError:
         print("ℹ️ Admin par défaut déjà existant")

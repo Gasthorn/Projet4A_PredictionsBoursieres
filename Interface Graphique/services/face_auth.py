@@ -1,5 +1,5 @@
 """
-Module de reconnaissance faciale simplifiée pour TradeLux
+Module de reconnaissance faciale simplifiée pour ENSIM
 Utilise OpenCV avec fallback console si GUI non disponible
 """
 
@@ -112,7 +112,7 @@ def detect_face(frame):
             return None
         
         print("\n" + "="*50)
-        print("🔵 CAPTURE FACIALE - TradeLux")
+        print("🔵 CAPTURE FACIALE - ENSIM")
         print("="*50)
         
         if GUI_AVAILABLE:
@@ -166,7 +166,7 @@ def detect_face(frame):
                     cv2.putText(display_frame, "⚠️ AUCUN VISAGE DETECTE", 
                                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
-                cv2.imshow('Capture Visage - TradeLux', display_frame)
+                cv2.imshow('Capture Visage - ENSIM', display_frame)
                 key = cv2.waitKey(1) & 0xFF
                 
                 if key == ord(' '):
@@ -259,7 +259,7 @@ def capture_face_from_webcam():
         video_capture.set(cv2.CAP_PROP_FPS, 30)
         
         print("\n" + "="*50)
-        print("🔵 CAPTURE FACIALE - TradeLux")
+        print("🔵 CAPTURE FACIALE - ENSIM")
         print("="*50)
         
         if GUI_AVAILABLE:
@@ -277,7 +277,7 @@ def capture_face_from_webcam():
         max_console_attempts = 5
         
         # Créer une fenêtre
-        window_name = 'Capture Visage - TradeLux'
+        window_name = 'Capture Visage - ENSIM'
         if GUI_AVAILABLE:
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(window_name, 800, 600)
@@ -446,7 +446,7 @@ def verify_face(email, tolerance=0.7):
             return False, "Webcam non disponible"
         
         print("\n" + "="*50)
-        print("🔵 VÉRIFICATION FACIALE - TradeLux")
+        print("🔵 VÉRIFICATION FACIALE - ENSIM")
         print("="*50)
         
         if GUI_AVAILABLE:
@@ -513,7 +513,7 @@ def verify_face(email, tolerance=0.7):
                     cv2.putText(display_frame, "⚠️ AUCUN VISAGE", (10, 60), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 
-                cv2.imshow('Verification Faciale - TradeLux', display_frame)
+                cv2.imshow('Verification Faciale - ENSIM', display_frame)
                 cv2.waitKey(1)
             
             # Mode console

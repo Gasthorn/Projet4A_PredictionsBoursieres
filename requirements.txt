@@ -7,4 +7,5 @@ tensorflow
 bcrypt
 opencv-python
 face_recognition
-dlib
+dlib-bin
+requests

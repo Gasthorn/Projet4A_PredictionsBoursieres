@@ -20,7 +20,7 @@ app = dash.Dash(
     ]
 )
 
-app.title = "TradeLux - Plateforme de Trading"
+app.title = "ENSIM - Predictions Boursieres"
 
 # === TICKERS ===
 TICKERS = {
@@ -90,7 +90,7 @@ app.layout = html.Div([
 ])
 
 # === LISTE DES PAGES PROTÉGÉES ===
-PROTECTED_PAGES = ["/actions_page", "/analysis", "/admin", "/mon-suivi"]
+PROTECTED_PAGES = ["/actions_page", "/analysis", "/admin", "/mon-suivi", "/profil"]
 
 # === CALLBACK PRINCIPAL : NAVBAR + TICKER + PROTECTION ===
 @app.callback(
@@ -117,6 +117,7 @@ def update_layout(pathname, session):
             dcc.Link("Marchés", href="/actions_page", className="nav-link"),
             dcc.Link("Analyse", href="/analysis", className="nav-link"),
             dcc.Link("Mon Suivi", href="/mon-suivi", className="nav-link"),
+            dcc.Link("Mon Profil", href="/profil", className="nav-link"),
         ])
         
         # Ajouter Admin si l'utilisateur est admin
@@ -124,14 +125,14 @@ def update_layout(pathname, session):
             print(f"👑 Lien admin ajouté pour {session.get('email')}")
             nav_links.append(dcc.Link("Admin", href="/admin", className="nav-link"))
         
-        # Ajouter le bouton Logout
-        nav_links.append(html.Button("Logout", id="logout-btn", className="nav-link"))
+        # Ajouter le bouton Déconnexion
+        nav_links.append(html.Button("Déconnexion", id="logout-btn", className="nav-link"))
         
     else:
         # === NON CONNECTÉ ===
         nav_links.extend([
-            dcc.Link("Login", href="/login", className="nav-link"),
-            dcc.Link("Signup", href="/signup", className="nav-link"),
+            dcc.Link("Connexion", href="/login", className="nav-link"),
+            dcc.Link("Inscription", href="/signup", className="nav-link"),
         ])
     
     # Détermine la classe CSS de la navbar
@@ -175,16 +176,22 @@ def update_ticker(n):
     return [ticker_set, ticker_set]
 
 # === CALLBACK LOGOUT ===
-@app.callback(
-    Output("url", "pathname", allow_duplicate=True),
+# On retourne null → Dash écrit null dans sessionStorage lui-même
+# Puis setTimeout donne le temps à Dash de finir avant de recharger la page
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        if (n_clicks && n_clicks > 0) {
+            setTimeout(function() { window.location.href = '/'; }, 300);
+            return null;
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
     Output("session-store", "data", allow_duplicate=True),
     Input("logout-btn", "n_clicks"),
     prevent_initial_call=True
 )
-def logout(n_clicks):
-    if n_clicks:
-        return "/", None
-    return dash.no_update, dash.no_update
 
 # === CALLBACK REDIRECTION PAGES PROTÉGÉES ===
 @app.callback(
