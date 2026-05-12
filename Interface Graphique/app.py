@@ -1,6 +1,8 @@
 import dash
 from dash import dcc, html, Input, Output, State
 import yfinance as yf
+import pandas as pd
+from flask import jsonify
 from services.database import init_db
 import logging
 
@@ -206,6 +208,37 @@ def redirect_if_not_logged(pathname, session):
         return "/login"
     
     return dash.no_update
+
+# === API OHLCV (yfinance → lightweight-charts) ===
+_ALLOWED = {'AAPL', 'AMZN', 'BTC-USD', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA'}
+
+@app.server.route('/api/ohlcv/<symbol>')
+def api_ohlcv(symbol):
+    if symbol not in _ALLOWED:
+        return jsonify({'error': 'Symbol not allowed'}), 400
+    try:
+        h = yf.Ticker(symbol).history(period='2y', interval='1d')
+        if h.empty:
+            return jsonify({'error': 'No data'}), 404
+        try:
+            h.index = pd.to_datetime(h.index).tz_localize(None)
+        except Exception:
+            h.index = pd.to_datetime(h.index).tz_convert(None)
+        candles = [
+            {
+                'time':  str(idx.date()),
+                'open':  round(float(row['Open']),  4),
+                'high':  round(float(row['High']),  4),
+                'low':   round(float(row['Low']),   4),
+                'close': round(float(row['Close']), 4),
+                'vol':   int(row['Volume']),
+            }
+            for idx, row in h.iterrows()
+        ]
+        return jsonify({'symbol': symbol, 'candles': candles})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 # === LANCEMENT ===
 if __name__ == "__main__":

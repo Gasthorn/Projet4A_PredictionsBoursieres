@@ -1,0 +1,29 @@
+/* ============================================================
+   ACTIONS PAGE — full-screen chart iframe
+   ============================================================ */
+
+/* Remove all page-content constraints */
+.page-content:has(.chart-page-outer) {
+  padding:    0 !important;
+  max-width:  none !important;
+  margin:     0 !important;
+}
+
+/* The outer wrapper fills from below the navbar to bottom.
+   Navbar on actions_page is always no-ticker, at top:0, ~80px tall.
+   We use position:fixed so it truly fills the viewport. */
+.chart-page-outer {
+  position: fixed;
+  top:    80px;
+  left:   0;
+  right:  0;
+  bottom: 0;
+  z-index: 500;
+}
+
+.chart-page-outer iframe {
+  width:   100%;
+  height:  100%;
+  border:  none;
+  display: block;
+}

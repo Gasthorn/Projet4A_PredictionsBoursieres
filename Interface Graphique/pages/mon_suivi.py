@@ -68,7 +68,7 @@ def _load_price_history(ticker, days=90):
 def _run_backtest(ticker, start_amount=500.0, days=180):
     """
     Simule un portefeuille de start_amount € qui suit les signaux IA sur les
-    `days` derniers jours. Fenêtre de trade : 3 jours (horizon du modèle LSTM).
+    `days` derniers jours.
     Retourne les séries temporelles + métriques.
     """
     prices_df = _load_price_history(ticker, days=days + 10)
