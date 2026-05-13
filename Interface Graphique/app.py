@@ -124,7 +124,7 @@ def update_layout(pathname, session):
         
         # Ajouter Admin si l'utilisateur est admin
         if session and session.get("is_admin"):
-            print(f"👑 Lien admin ajouté pour {session.get('email')}")
+            print(f" Lien admin ajouté pour {session.get('email')}")
             nav_links.append(dcc.Link("Admin", href="/admin", className="nav-link"))
         
         # Ajouter le bouton Déconnexion
@@ -242,4 +242,7 @@ def api_ohlcv(symbol):
 
 # === LANCEMENT ===
 if __name__ == "__main__":
-    app.run(port=7860, debug=True)
+    import os
+    port = int(os.environ.get("PORT", 8050))
+    debug = os.environ.get("DEBUG", "true").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug)
