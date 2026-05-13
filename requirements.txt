@@ -5,6 +5,7 @@ numpy
 plotly
 bcrypt
 opencv-python-headless
-face_recognition
-dlib-bin
 requests
+face-recognition-models
+Pillow
+click

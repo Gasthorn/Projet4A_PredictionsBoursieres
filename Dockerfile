@@ -9,7 +9,8 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install dlib-bin
-RUN pip install -r requirements.txt
+RUN pip install --no-deps face_recognition
+RUN pip install -r requirements.txt --ignore-requires-python
 
 COPY . .
 
