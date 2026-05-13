@@ -5,6 +5,7 @@ import pandas as pd
 from flask import jsonify
 from services.database import init_db
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Supprimer les logs trop bavards
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
@@ -107,34 +108,34 @@ def update_layout(pathname, session):
     is_home = pathname == "/"
     
     # === 1. CONSTRUCTION DE LA NAVBAR ===
-    # TOUJOURS visibles : Accueil, Témoignages
+    def nav_cls(href):
+        if href == "/":
+            return "nav-link active" if pathname == "/" else "nav-link"
+        return "nav-link active" if pathname.startswith(href) else "nav-link"
+
     nav_links = [
-        dcc.Link("Accueil", href="/", className="nav-link"),
-        dcc.Link("Témoignages", href="/temoignages", className="nav-link"),
+        dcc.Link("Accueil",     href="/",            className=nav_cls("/")),
+        dcc.Link("Témoignages", href="/temoignages", className=nav_cls("/temoignages")),
     ]
-    
+
     if is_logged_in:
-        # === CONNECTÉ ===
         nav_links.extend([
-            dcc.Link("Marchés", href="/actions_page", className="nav-link"),
-            dcc.Link("Analyse", href="/analysis", className="nav-link"),
-            dcc.Link("Mon Suivi", href="/mon-suivi", className="nav-link"),
-            dcc.Link("Mon Profil", href="/profil", className="nav-link"),
+            dcc.Link("Marchés",    href="/actions_page", className=nav_cls("/actions_page")),
+            dcc.Link("Analyse",    href="/analysis",     className=nav_cls("/analysis")),
+            dcc.Link("Mon Suivi",  href="/mon-suivi",    className=nav_cls("/mon-suivi")),
+            dcc.Link("Mon Profil", href="/profil",       className=nav_cls("/profil")),
         ])
-        
-        # Ajouter Admin si l'utilisateur est admin
+
         if session and session.get("is_admin"):
-            print(f" Lien admin ajouté pour {session.get('email')}")
-            nav_links.append(dcc.Link("Admin", href="/admin", className="nav-link"))
-        
-        # Ajouter le bouton Déconnexion
+            print(f"👑 Lien admin ajouté pour {session.get('email')}")
+            nav_links.append(dcc.Link("Admin", href="/admin", className=nav_cls("/admin")))
+
         nav_links.append(html.Button("Déconnexion", id="logout-btn", className="nav-link"))
-        
+
     else:
-        # === NON CONNECTÉ ===
         nav_links.extend([
-            dcc.Link("Connexion", href="/login", className="nav-link"),
-            dcc.Link("Inscription", href="/signup", className="nav-link"),
+            dcc.Link("Connexion",   href="/login",  className=nav_cls("/login")),
+            dcc.Link("Inscription", href="/signup", className=nav_cls("/signup")),
         ])
     
     # Détermine la classe CSS de la navbar
@@ -238,6 +239,33 @@ def api_ohlcv(symbol):
         return jsonify({'symbol': symbol, 'candles': candles})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# === API PRICES (parallel fetch for all symbols) ===
+def _fetch_price(sym):
+    try:
+        h = yf.Ticker(sym).history(period='5d', interval='1d')
+        if h.empty:
+            return sym, None
+        try:
+            h.index = pd.to_datetime(h.index).tz_localize(None)
+        except Exception:
+            h.index = pd.to_datetime(h.index).tz_convert(None)
+        price = float(h['Close'].iloc[-1])
+        prev  = float(h['Close'].iloc[-2]) if len(h) >= 2 else price
+        return sym, {'price': round(price, 2), 'pct': round((price - prev) / prev * 100, 2)}
+    except Exception:
+        return sym, None
+
+@app.server.route('/api/prices')
+def api_prices():
+    results = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_fetch_price, sym): sym for sym in _ALLOWED}
+        for future in as_completed(futures):
+            sym, data = future.result()
+            results[sym] = data
+    return jsonify(results)
 
 
 # === LANCEMENT ===
