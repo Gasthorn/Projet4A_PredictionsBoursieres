@@ -556,7 +556,9 @@ def update_news_feed(data, filter_ticker, filter_sentiment):
         sent_label = sent_label_map.get(sentiment, 'NEUTRE')
         
         items.append(
-            html.A(href=url, target="_blank", className="analyse-news-link", children=[
+            html.A(href=url, target="_blank", className="analyse-news-link",
+                   **{'data-preview-url': url, 'data-title': title, 'data-source': source},
+                   children=[
                 html.Div(className=f"analyse-news-row {sent_class}", children=[
                     html.Div(className="analyse-news-time-col", children=[
                         html.Div(full_date, className="analyse-news-time"),

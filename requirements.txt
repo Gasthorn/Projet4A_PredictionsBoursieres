@@ -9,3 +9,7 @@ requests
 face-recognition-models
 Pillow
 click
+beautifulsoup4
+scikit-learn
+joblib
+tensorflow

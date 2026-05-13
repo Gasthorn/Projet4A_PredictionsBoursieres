@@ -160,6 +160,112 @@ def _run_backtest(ticker, start_amount=500.0, days=180):
     }
 
 
+def _run_backtest_lstm(ticker, start_amount=500.0, days=180):
+    """
+    Backtest LSTM : simule un portefeuille en suivant les prédictions BiLSTM
+    en rolling window sur les `days` derniers jours.
+    Une seule inférence batch → résultats en quelques secondes.
+    """
+    try:
+        import numpy as np
+        import warnings
+        from services.lstm_service import _load
+
+        prices_df = _load_price_history(ticker, days=days + 75)
+        if prices_df.empty or len(prices_df) < 65:
+            return None
+
+        model, scaler, encoder = _load()
+        try:
+            sym_id = int(encoder.transform([ticker])[0])
+        except Exception:
+            return None
+
+        prices_df = prices_df.sort_values('date').reset_index(drop=True)
+        closes   = prices_df['Close'].values
+        dates_arr = prices_df['date'].values
+
+        # Première étape valide : index 60 (besoin de closes[0..60] pour 60 rendements)
+        bt_start = max(60, len(closes) - 1 - days)
+        if bt_start >= len(closes) - 1:
+            return None
+
+        n_steps = len(closes) - 1 - bt_start
+
+        # Construction batch de toutes les séquences d'entrée
+        seqs = np.zeros((n_steps, 60, 1), dtype=np.float32)
+        for k, i in enumerate(range(bt_start, len(closes) - 1)):
+            window  = closes[i - 60: i + 1]
+            returns = np.diff(window) / window[:-1]
+            seqs[k, :, 0] = scaler.transform(returns.reshape(-1, 1)).flatten()
+
+        sym_ids_batch = np.full((n_steps, 1), sym_id, dtype=np.int32)
+
+        warnings.filterwarnings('ignore')
+        preds_sc  = model.predict([seqs, sym_ids_batch], verbose=0, batch_size=64)
+        pred_rets = scaler.inverse_transform(preds_sc).flatten()
+
+        portfolio     = start_amount
+        buy_hold_ref  = float(closes[bt_start])
+        dates_out, port_vals, bh_vals, trade_log = [], [], [], []
+        wins = losses = 0
+
+        for k, i in enumerate(range(bt_start, len(closes) - 1)):
+            pred_ret   = pred_rets[k]
+            p_start    = float(closes[i])
+            p_end      = float(closes[i + 1])
+            actual_ret = (p_end - p_start) / p_start
+
+            signal  = 'ACHETER' if pred_ret > 0 else 'VENDRE'
+            pnl_pct = actual_ret if pred_ret > 0 else -actual_ret
+
+            portfolio *= (1 + pnl_pct)
+            bh         = start_amount * (p_end / buy_hold_ref)
+
+            date_s = pd.Timestamp(dates_arr[i])
+            dates_out.append(date_s)
+            port_vals.append(round(portfolio, 2))
+            bh_vals.append(round(bh, 2))
+
+            if pnl_pct > 0:
+                wins += 1
+            else:
+                losses += 1
+            trade_log.append({
+                'date': date_s.strftime('%d %b %Y'),
+                'signal': signal,
+                'return_pct': round(pnl_pct * 100, 2),
+                'pnl_eur': round(
+                    portfolio * pnl_pct / (1 + pnl_pct) if abs(1 + pnl_pct) > 0.001 else 0, 2
+                ),
+            })
+
+        if not dates_out:
+            return None
+
+        n = wins + losses
+        return {
+            'dates':          dates_out,
+            'portfolio':      port_vals,
+            'buy_hold':       bh_vals,
+            'final_value':    round(portfolio, 2),
+            'total_return':   round((portfolio - start_amount) / start_amount * 100, 2),
+            'buy_hold_return':round((bh_vals[-1] - start_amount) / start_amount * 100, 2) if bh_vals else 0,
+            'start_amount':   start_amount,
+            'n_trades':       n,
+            'wins':           wins,
+            'losses':         losses,
+            'win_rate':       round(wins / n * 100) if n > 0 else 0,
+            'trades':         trade_log[-15:],
+            'start_date':     dates_out[0].strftime('%d %b %Y'),
+            'data_start':     dates_out[0].strftime('%d %b %Y'),
+            'first_signal_ts':dates_out[0].strftime('%d %b %Y'),
+        }
+    except Exception as e:
+        print(f"[BACKTEST LSTM] {ticker}: {e}")
+        return None
+
+
 def _load_articles_for_backtest():
     """Charge tous les articles sans filtre de date (pour backtesting)."""
     try:
@@ -725,6 +831,7 @@ def _build_tracking_report_pdf(email):
 
 layout = html.Div(className="suivi-page", children=[
     dcc.Store(id="suivi-pred-store"),
+    dcc.Store(id="suivi-mode", data="sentiment"),
     dcc.Store(id="suivi-modal-ticker"),
     dcc.Store(id="suivi-modal-action", data="ACHAT"),
     dcc.Store(id="suivi-refresh", data=0),
@@ -762,8 +869,26 @@ layout = html.Div(className="suivi-page", children=[
                     html.P("Cliquez sur une action pour calculer combien vous pourriez gagner", className="suivi-section-sub"),
                 ]),
             ]),
-            html.Div(id="suivi-pred-grid", className="suivi-pred-grid",
-                     children=html.Div("Chargement des predictions...", className="suivi-loading")),
+            # ── Mode toggle ──
+            html.Div(className="home-mode-bar", children=[
+                html.Button(
+                    [html.I(className="fas fa-newspaper"), "  Analyse des actualités"],
+                    id="suivi-btn-sentiment",
+                    className="home-mode-btn home-mode-active",
+                    n_clicks=0,
+                ),
+                html.Button(
+                    [html.I(className="fas fa-brain"), "  Modèle LSTM (prix)"],
+                    id="suivi-btn-lstm",
+                    className="home-mode-btn",
+                    n_clicks=0,
+                ),
+            ]),
+            dcc.Loading(
+                type="dot", color="#00f0ff",
+                children=html.Div(id="suivi-pred-grid", className="suivi-pred-grid",
+                                  children=html.Div("Chargement des prédictions...", className="suivi-loading")),
+            ),
         ]),
 
         # ===== HISTORIQUE =====
@@ -886,6 +1011,12 @@ layout = html.Div(className="suivi-page", children=[
         ]),
     ]),
 
+    # ===== TOAST CHARGEMENT =====
+    html.Div(id="suivi-toast", className="suivi-toast-hidden", children=[
+        html.Div(className="suivi-toast-ring"),
+        "Chargement en cours...",
+    ]),
+
     # ===== MODAL BACKTEST =====
     html.Div(id="suivi-backtest-bg", className="suivi-modal-hidden", children=[
         html.Div(className="suivi-backtest-modal", children=[
@@ -949,29 +1080,91 @@ layout = html.Div(className="suivi-page", children=[
 # ==================== CALLBACKS ====================
 
 @callback(
-    Output("suivi-pred-store", "data"),
-    Input("suivi-init", "n_intervals"),
-    Input("suivi-auto", "n_intervals"),
+    Output("suivi-btn-sentiment", "className"),
+    Output("suivi-btn-lstm",      "className"),
+    Output("suivi-mode",          "data"),
+    Output("suivi-toast",         "className", allow_duplicate=True),
+    Input("suivi-btn-sentiment",  "n_clicks"),
+    Input("suivi-btn-lstm",       "n_clicks"),
+    prevent_initial_call=True,
 )
-def load_pred_data(_init, _auto):
+def toggle_suivi_mode(_s, _l):
+    active = "home-mode-btn home-mode-active"
+    normal = "home-mode-btn"
+    if ctx.triggered_id == "suivi-btn-lstm":
+        return normal, active, "lstm", "suivi-toast"
+    return active, normal, "sentiment", "suivi-toast"
+
+
+@callback(
+    Output("suivi-pred-store", "data"),
+    Input("suivi-init",  "n_intervals"),
+    Input("suivi-auto",  "n_intervals"),
+    Input("suivi-mode",  "data"),
+)
+def load_pred_data(_init, _auto, mode):
+    from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+    mode = mode or "sentiment"
+
+    if mode == "lstm":
+        from services.lstm_service import predict as lstm_predict
+
+        def _fetch(ticker):
+            return ticker, lstm_predict(ticker)
+
+        result = {}
+        with ThreadPoolExecutor(max_workers=7) as ex:
+            futures = {ex.submit(_fetch, t): t for t in COMPANIES}
+            for f in _as_completed(futures):
+                ticker, pred = f.result()
+                name = COMPANIES[ticker]
+                if pred is None:
+                    result[ticker] = {
+                        'signal': 'NEUTRE', 'score': 0.0, 'confidence': 0.0,
+                        'articles': 0, 'signal_valid_to': '—', 'horizon_label': 'N/A',
+                        'entry_price': 0.0, 'current_price': 0.0, 'change_pct': 0.0,
+                        'entry_date': '', 'current_date': '', 'name': name, 'is_lstm': True,
+                    }
+                else:
+                    result[ticker] = {
+                        'signal':         'HAUSSIER' if pred['signal'] == 'ACHETER' else 'BAISSIER',
+                        'score':          pred['return_pct'] / 100,
+                        'confidence':     65.0,
+                        'articles':       0,
+                        'signal_valid_to':'Prochain mouvement',
+                        'horizon_label':  f"{pred['return_pct']:+.3f}%",
+                        'entry_price':    pred['current_price'],
+                        'current_price':  pred['predicted_price'],
+                        'change_pct':     pred['return_pct'],
+                        'entry_date':     "Aujourd'hui",
+                        'current_date':   'Prédit',
+                        'name':           name,
+                        'is_lstm':        True,
+                        'return_pct':     pred['return_pct'],
+                    }
+        return result
+
+    # ── Sentiment (défaut) ──
     df = _load_articles()
     result = {}
     for ticker, name in COMPANIES.items():
-        sig = _compute_signal(df, ticker)
+        sig    = _compute_signal(df, ticker)
         prices = _get_prices(ticker, signal_date=sig.get('latest_dt'))
-        result[ticker] = {**sig, **prices, 'name': name}
+        result[ticker] = {**sig, **prices, 'name': name, 'is_lstm': False}
     return result
 
 
 @callback(
     Output("suivi-welcome", "children"),
     Output("suivi-pred-grid", "children"),
+    Output("suivi-toast", "className", allow_duplicate=True),
     Input("suivi-pred-store", "data"),
     State("session-store", "data"),
+    prevent_initial_call='initial_duplicate',
 )
 def render_predictions(pred_data, session):
     if not pred_data:
-        return "", html.Div("Chargement...", className="suivi-loading")
+        return "", html.Div("Chargement...", className="suivi-loading"), "suivi-toast-hidden"
 
     prenom = ""
     if session:
@@ -1001,10 +1194,12 @@ def render_predictions(pred_data, session):
         entry = data.get('entry_price', 0)
         current = data.get('current_price', 0)
         change = data.get('change_pct', 0)
-        articles = data.get('articles', 0)
-        name = data.get('name', ticker)
-        entry_date = data.get('entry_date', '')
+        articles  = data.get('articles', 0)
+        name      = data.get('name', ticker)
+        entry_date   = data.get('entry_date', '')
         current_date = data.get('current_date', '')
+        is_lstm   = data.get('is_lstm', False)
+        return_pct = data.get('return_pct', None)
 
         rec_label = _rec_label.get(signal, signal)
 
@@ -1024,13 +1219,20 @@ def render_predictions(pred_data, session):
                 ]),
             ]),
             html.Div(className="suivi-date-row", children=[
-                html.I(className="fas fa-clock"),
-                html.Span(f"Conseil valable jusqu'au {data.get('signal_valid_to', '—')}", className="suivi-date-valid"),
+                html.I(className="fas fa-brain" if is_lstm else "fas fa-clock"),
+                html.Span(
+                    "Rendement prédit par le modèle LSTM" if is_lstm
+                    else f"Conseil valable jusqu'au {data.get('signal_valid_to', '—')}",
+                    className="suivi-date-valid"
+                ),
                 html.Span(data.get('horizon_label', '~48h'), className="suivi-date-horizon"),
             ]),
             html.Div(className="suivi-card-footer", children=[
-                html.Span([html.I(className="fas fa-newspaper"), f"  {articles} articles"],
-                          className="suivi-card-meta"),
+                html.Span(
+                    [html.I(className="fas fa-microchip"), f"  {return_pct:+.3f}%"] if is_lstm and return_pct is not None
+                    else [html.I(className="fas fa-newspaper"), f"  {articles} articles"],
+                    className="suivi-card-meta"
+                ),
                 html.Div(className="suivi-card-btns", children=[
                     html.Button(
                         [html.I(className="fas fa-chart-area"), "  Voir l'historique"],
@@ -1074,7 +1276,7 @@ def render_predictions(pred_data, session):
             ]),
         ]))
 
-    return welcome, cards
+    return welcome, cards, "suivi-toast-hidden"
 
 
 @callback(
@@ -1351,9 +1553,10 @@ def update_simulation(amount, action, modal_ticker, pred_data):
     State("session-store", "data"),
     State("suivi-refresh", "data"),
     State("suivi-modal-action", "data"),
+    State("suivi-mode", "data"),
     prevent_initial_call=True,
 )
-def save_trade(n_clicks, amount, modal_ticker, pred_data, session, refresh_count, action):
+def save_trade(n_clicks, amount, modal_ticker, pred_data, session, refresh_count, action, mode):
     if not n_clicks or not amount or not modal_ticker or not session:
         return dash.no_update, dash.no_update, dash.no_update
 
@@ -1374,6 +1577,7 @@ def save_trade(n_clicks, amount, modal_ticker, pred_data, session, refresh_count
         current_price=data['current_price'],
         amount=amount,
         action=action or "ACHAT",
+        model_type=mode or "sentiment",
     )
 
     if ok:
@@ -1408,18 +1612,24 @@ def export_tracking_report(n_clicks, session):
     Output("suivi-history", "children"),
     Input("suivi-refresh", "data"),
     Input("suivi-init", "n_intervals"),
+    Input("suivi-mode", "data"),
     State("session-store", "data"),
 )
-def render_history(_trigger, _init, session):
+def render_history(_trigger, _init, mode, session):
     if not session:
         return html.Div("Connectez-vous pour voir votre historique", className="suivi-empty")
 
-    trades = get_user_trades(session.get("email"), 20)
+    current_mode = mode or "sentiment"
+    all_trades = get_user_trades(session.get("email"), 50)
+    trades = [t for t in all_trades if (t[13] if len(t) > 13 else 'sentiment') == current_mode]
+
+    mode_label = "Modèle LSTM" if current_mode == "lstm" else "Analyse des actualités"
 
     if not trades:
+        icon = "fas fa-brain" if current_mode == "lstm" else "fas fa-newspaper"
         return html.Div(className="suivi-empty", children=[
-            html.I(className="fas fa-inbox", style={"fontSize": "2.5rem", "display": "block", "marginBottom": "12px"}),
-            html.P("Vous n'avez pas encore enregistré d'investissement"),
+            html.I(className=icon, style={"fontSize": "2.5rem", "display": "block", "marginBottom": "12px"}),
+            html.P(f"Aucun investissement enregistré avec « {mode_label} »"),
             html.P(
                 "Cliquez sur 'Calculer mon gain' puis 'J'ai fait cet investissement' pour le sauvegarder ici",
                 className="suivi-empty-sub",
@@ -1433,7 +1643,7 @@ def render_history(_trigger, _init, session):
     for t in trades:
         # id(0) user_email(1) symbol(2) entry_price(3) exit_price(4)
         # entry_date(5) exit_date(6) quantity(7) prediction_direction(8)
-        # actual_direction(9) pnl(10) pnl_percentage(11) status(12)
+        # actual_direction(9) pnl(10) pnl_percentage(11) status(12) model_type(13)
         symbol = t[2]
         entry = t[3] or 0
         exit_p = t[4]
@@ -1443,19 +1653,31 @@ def render_history(_trigger, _init, session):
         actual_dir = t[9] or 'up'
         pnl = t[10] or 0
         pnl_pct = t[11] or 0
+        trade_model = t[13] if len(t) > 13 else 'sentiment'
 
         pnl_cls = "suivi-td-pos" if pnl > 0 else "suivi-td-neg" if pnl < 0 else ""
         signal_lbl = sig_display.get(pred_dir, pred_dir.upper())
         badge = sig_cls.get(signal_lbl, '')
 
-        # ACHAT si actual_direction='up', VENTE si 'down'
         op_label = "ACHAT" if actual_dir == 'up' else "VENTE"
         op_cls = "suivi-op-buy" if actual_dir == 'up' else "suivi-op-sell"
         op_icon = "fas fa-arrow-trend-up" if actual_dir == 'up' else "fas fa-arrow-trend-down"
 
+        if trade_model == "lstm":
+            model_badge = html.Span(
+                [html.I(className="fas fa-brain"), "  LSTM"],
+                className="suivi-badge-sm suivi-badge-model-lstm",
+            )
+        else:
+            model_badge = html.Span(
+                [html.I(className="fas fa-newspaper"), "  Actualités"],
+                className="suivi-badge-sm suivi-badge-model-sentiment",
+            )
+
         rows.append(html.Tr([
             html.Td(html.Span(symbol, className="suivi-td-ticker")),
             html.Td(html.Span(signal_lbl, className=f"suivi-badge-sm {badge}")),
+            html.Td(model_badge),
             html.Td(html.Span(
                 [html.I(className=op_icon), f"  {op_label}"],
                 className=f"suivi-op-badge {op_cls}",
@@ -1473,6 +1695,7 @@ def render_history(_trigger, _init, session):
             html.Thead(html.Tr([
                 html.Th([html.I(className="fas fa-coins"), "  Action"]),
                 html.Th([html.I(className="fas fa-robot"), "  Conseil IA"]),
+                html.Th([html.I(className="fas fa-microchip"), "  Modèle IA"]),
                 html.Th([html.I(className="fas fa-exchange-alt"), "  Achat / Vente"]),
                 html.Th([html.I(className="fas fa-wallet"), "  Montant"]),
                 html.Th("Prix d'achat"),
@@ -1491,14 +1714,16 @@ def render_history(_trigger, _init, session):
     Output("suivi-ticker-select", "value"),
     Input("suivi-refresh", "data"),
     Input("suivi-init", "n_intervals"),
+    Input("suivi-mode", "data"),
     State("session-store", "data"),
     State("suivi-ticker-select", "value"),
 )
-def update_ticker_options(_refresh, _init, session, current_value):
+def update_ticker_options(_refresh, _init, mode, session, current_value):
     if not session:
         return [], None
-    trades = get_user_trades(session.get('email'), 200)
-    # Tickers uniques dans l'ordre d'apparition (plus récent en premier)
+    current_mode = mode or "sentiment"
+    all_trades = get_user_trades(session.get('email'), 200)
+    trades = [t for t in all_trades if (t[13] if len(t) > 13 else 'sentiment') == current_mode]
     seen = {}
     for t in trades:
         sym = t[2]
@@ -1507,7 +1732,6 @@ def update_ticker_options(_refresh, _init, session, current_value):
     if not seen:
         return [], None
     options = [{'label': f"{sym} — {name}", 'value': sym} for sym, name in seen.items()]
-    # Garder la sélection courante si elle est toujours valide, sinon prendre le premier
     default = current_value if current_value and current_value in seen else list(seen.keys())[0]
     return options, default
 
@@ -1516,9 +1740,10 @@ def update_ticker_options(_refresh, _init, session, current_value):
     Output("suivi-perf-chart", "figure"),
     Input("suivi-ticker-select", "value"),
     Input("suivi-refresh", "data"),
+    State("suivi-mode", "data"),
     State("session-store", "data"),
 )
-def render_perf_chart(ticker, _refresh, session):
+def render_perf_chart(ticker, _refresh, mode, session):
     _empty = go.Figure().update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(5,10,30,0.5)',
@@ -1536,9 +1761,13 @@ def render_perf_chart(ticker, _refresh, session):
     if not ticker or not session:
         return _empty
 
-    # Récupérer les trades de l'utilisateur sur ce ticker
+    # Récupérer les trades de l'utilisateur sur ce ticker (filtrés par modèle)
+    current_mode = mode or "sentiment"
     all_trades = get_user_trades(session.get('email'), 200)
-    ticker_trades = [t for t in all_trades if t[2] == ticker]
+    ticker_trades = [
+        t for t in all_trades
+        if t[2] == ticker and (t[13] if len(t) > 13 else 'sentiment') == current_mode
+    ]
 
     if not ticker_trades:
         return _empty
@@ -1744,13 +1973,15 @@ def toggle_backtest_modal(card_clicks, close_n):
     Input("suivi-backtest-ticker-store", "data"),
     Input("suivi-backtest-recalc-btn", "n_clicks"),
     State("suivi-backtest-amount-input", "value"),
+    State("suivi-mode", "data"),
     prevent_initial_call=True,
 )
-def render_backtest(ticker, _recalc, user_amount):
+def render_backtest(ticker, _recalc, user_amount, mode):
     try:
         amount = float(user_amount) if user_amount and float(user_amount) > 0 else 500.0
     except (TypeError, ValueError):
         amount = 500.0
+    current_mode = mode or "sentiment"
 
     _empty_fig = go.Figure().update_layout(
         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(5,10,30,0.5)',
@@ -1765,12 +1996,18 @@ def render_backtest(ticker, _recalc, user_amount):
 
     company = COMPANIES.get(ticker, ticker) if ticker else "—"
     title = f"{ticker} — {company}" if ticker else "Backtest IA"
-    sub = f"{amount:,.0f} € investis en suivant nos signaux IA sur {company} — évolution historique réelle"
+
+    if current_mode == "lstm":
+        model_lbl = "modèle BiLSTM"
+        sub = f"{amount:,.0f} € investis en suivant les prédictions du modèle BiLSTM sur {company} — simulation rolling sur données réelles"
+    else:
+        model_lbl = "analyse des actualités"
+        sub = f"{amount:,.0f} € investis en suivant nos signaux IA sur {company} — évolution historique réelle"
 
     if not ticker:
         return title, "Sélectionnez une action depuis les cartes de prédiction", "", [], _empty_fig, []
 
-    bt = _run_backtest(ticker, start_amount=amount, days=180)
+    bt = (_run_backtest_lstm if current_mode == "lstm" else _run_backtest)(ticker, start_amount=amount, days=180)
     if not bt:
         return title, sub, "", [], _empty_fig, []
 
@@ -1799,13 +2036,13 @@ def render_backtest(ticker, _recalc, user_amount):
     first_signal = bt['start_date']
     data_window = bt['data_start']
     summary = html.Div(className="suivi-bt-summary", children=[
-        html.I(className="fas fa-lightbulb"),
+        html.I(className="fas fa-brain" if current_mode == "lstm" else "fas fa-lightbulb"),
         html.Span([
             "Si vous aviez investi ",
             html.Strong(f"{amount:,.0f} €", style={"color": "#eaf6ff"}),
             f" sur {company} à partir du ",
             html.Strong(first_signal, style={"color": "#eaf6ff"}),
-            " (premier conseil IA disponible) et suivi tous nos conseils jusqu'à aujourd'hui, vous auriez ",
+            f" et suivi tous les conseils du {model_lbl} jusqu'à aujourd'hui, vous auriez ",
             html.Strong(f"{final:,.2f} €", style={"color": gain_color}),
             " — soit ",
             html.Strong(f"{gain:+,.2f} € ({ret:+.1f}%)", style={"color": gain_color}),
@@ -1874,7 +2111,7 @@ def render_backtest(ticker, _recalc, user_amount):
     ))
     fig.add_trace(go.Scatter(
         x=chart_dates, y=chart_portfolio,
-        mode='lines', name='En suivant les conseils IA',
+        mode='lines', name=f'En suivant le {model_lbl}',
         line=dict(color='#00f0ff', width=2.5),
         fill='tonexty',
         fillcolor='rgba(0,240,255,0.04)',

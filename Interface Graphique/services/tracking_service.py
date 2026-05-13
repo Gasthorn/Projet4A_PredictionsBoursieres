@@ -410,9 +410,10 @@ def get_user_trades(user_email, limit=50):
         conn.close()
 
 
-def save_followed_trade(user_email, symbol, signal, entry_price, current_price, amount, action='ACHAT'):
+def save_followed_trade(user_email, symbol, signal, entry_price, current_price, amount, action='ACHAT', model_type='sentiment'):
     """Sauvegarde un trade que l'utilisateur confirme avoir suivi.
     action : 'ACHAT' (position longue) ou 'VENTE' (position courte/vente à découvert)
+    model_type : 'sentiment' | 'lstm'
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -432,13 +433,14 @@ def save_followed_trade(user_email, symbol, signal, entry_price, current_price, 
             actual_dir = 'neutral'
 
         pnl_pct = (pnl / amount * 100) if amount > 0 else 0.0
+        model_type = model_type or 'sentiment'
 
         cursor.execute("""
         INSERT INTO user_trades
-        (user_email, symbol, entry_price, exit_price, quantity, prediction_direction, actual_direction, pnl, pnl_percentage, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'closed')
+        (user_email, symbol, entry_price, exit_price, quantity, prediction_direction, actual_direction, pnl, pnl_percentage, status, model_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'closed', ?)
         """, (user_email, symbol, round(entry_price, 2), round(current_price, 2),
-              round(amount, 2), pred_dir, actual_dir, round(pnl, 2), round(pnl_pct, 2)))
+              round(amount, 2), pred_dir, actual_dir, round(pnl, 2), round(pnl_pct, 2), model_type))
 
         conn.commit()
         print(f"✅ Trade sauvegardé: {symbol} | {signal} | PnL: {pnl:+.2f}€")

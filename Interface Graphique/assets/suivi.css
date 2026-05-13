@@ -1574,3 +1574,63 @@ div.suivi-ticker-dd div.Select-control {
   padding: 20px;
   font-style: italic;
 }
+
+/* ===== TOAST CHARGEMENT ===== */
+.suivi-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 10, 30, 0.96);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  border-radius: 40px;
+  padding: 11px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #00f0ff;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  z-index: 99998;
+  box-shadow: 0 0 28px rgba(0, 240, 255, 0.18);
+  animation: suivi-toast-in 0.22s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.suivi-toast-hidden {
+  display: none;
+}
+
+.suivi-toast-ring {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(0, 240, 255, 0.2);
+  border-top-color: #00f0ff;
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: suivi-toast-spin 0.75s linear infinite;
+}
+
+@keyframes suivi-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes suivi-toast-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== MODEL BADGES (history table) ===== */
+.suivi-badge-model-sentiment {
+  background: rgba(0, 180, 255, 0.1);
+  border-color: rgba(0, 180, 255, 0.3);
+  color: #6cd2f5;
+}
+
+.suivi-badge-model-lstm {
+  background: rgba(160, 80, 255, 0.1);
+  border-color: rgba(160, 80, 255, 0.3);
+  color: #c4a0ff;
+}

@@ -104,10 +104,19 @@ def init_db():
         pnl REAL,
         pnl_percentage REAL,
         status TEXT DEFAULT 'open',
+        model_type TEXT DEFAULT 'sentiment',
         FOREIGN KEY (user_email) REFERENCES users(email)
     )
     """)
     print("✅ Table user_trades vérifiée/créée")
+
+    # Migration: model_type column (for existing databases)
+    cursor.execute("PRAGMA table_info(user_trades)")
+    trade_columns = [col[1] for col in cursor.fetchall()]
+    if 'model_type' not in trade_columns:
+        cursor.execute("ALTER TABLE user_trades ADD COLUMN model_type TEXT DEFAULT 'sentiment'")
+        conn.commit()
+        print("✅ Migration model_type réussie")
 
     # === TABLE PREDICTIONS_LOG ===
     cursor.execute("""

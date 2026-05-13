@@ -2,7 +2,9 @@ import dash
 from dash import dcc, html, Input, Output, State
 import yfinance as yf
 import pandas as pd
-from flask import jsonify
+from flask import jsonify, request as flask_request
+import requests
+from bs4 import BeautifulSoup
 from services.database import init_db
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -237,6 +239,53 @@ def api_ohlcv(symbol):
             for idx, row in h.iterrows()
         ]
         return jsonify({'symbol': symbol, 'candles': candles})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# === API PREVIEW (Open Graph tags for article hover card) ===
+_preview_cache = {}
+
+@app.server.route('/api/preview')
+def api_preview():
+    url = flask_request.args.get('url', '')
+    if not url or not url.startswith(('http://', 'https://')):
+        return jsonify({'error': 'Invalid URL'}), 400
+
+    if url in _preview_cache:
+        return jsonify(_preview_cache[url])
+
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        resp = requests.get(url, timeout=5, headers=headers, allow_redirects=True)
+        soup = BeautifulSoup(resp.text, 'html.parser')
+
+        def og(prop):
+            tag = soup.find('meta', property=f'og:{prop}')
+            return tag['content'].strip() if tag and tag.get('content') else None
+
+        def meta_name(name):
+            tag = soup.find('meta', attrs={'name': name})
+            return tag['content'].strip() if tag and tag.get('content') else None
+
+        title = (og('title') or meta_name('title') or
+                 (soup.title.string.strip() if soup.title else '') or '')
+        image = og('image') or meta_name('twitter:image') or ''
+        description = og('description') or meta_name('description') or ''
+        site_name = og('site_name') or ''
+
+        result = {
+            'title':       title[:200],
+            'image':       image,
+            'description': description[:300],
+            'site_name':   site_name,
+        }
+        if len(_preview_cache) < 500:
+            _preview_cache[url] = result
+
+        resp_json = jsonify(result)
+        resp_json.headers['Cache-Control'] = 'max-age=3600'
+        return resp_json
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -2680,3 +2680,47 @@ body {
   background: rgba(0,240,255,0.08);
   color: #eaf6ff;
 }
+
+/* ============================================================
+   HOME — MODE TOGGLE (Actualités IA / Modèle LSTM)
+   ============================================================ */
+
+.home-mode-bar {
+  display:         flex;
+  justify-content: center;
+  gap:             10px;
+  margin:          0 0 36px;
+  flex-wrap:       wrap;
+}
+
+.home-mode-btn {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           8px;
+  padding:       10px 24px;
+  border:        1px solid rgba(0, 240, 255, 0.18);
+  border-radius: 50px;
+  background:    rgba(0, 240, 255, 0.04);
+  color:         rgba(184, 223, 240, 0.65);
+  font-size:     13.5px;
+  font-weight:   600;
+  font-family:   'Inter', sans-serif;
+  letter-spacing: 0.3px;
+  cursor:        pointer;
+  transition:    all 0.22s ease;
+}
+
+.home-mode-btn:hover {
+  border-color: rgba(0, 240, 255, 0.45);
+  color:        #eaf6ff;
+  background:   rgba(0, 240, 255, 0.08);
+}
+
+.home-mode-btn.home-mode-active {
+  border-color: #00f0ff;
+  color:        #00f0ff;
+  background:   rgba(0, 240, 255, 0.1);
+  box-shadow:   0 0 18px rgba(0, 240, 255, 0.18),
+                inset 0 0 16px rgba(0, 240, 255, 0.04);
+  text-shadow:  0 0 10px rgba(0, 240, 255, 0.45);
+}
