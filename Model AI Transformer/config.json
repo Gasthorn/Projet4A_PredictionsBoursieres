@@ -1,0 +1,14 @@
+{
+    "model_type": "HybridTransformerBounded",
+    "symbol": "AAPL",
+    "window": 60,
+    "d_model": 64,
+    "nhead": 4,
+    "num_layers": 2,
+    "dropout": 0.15,
+    "max_logret": 0.05,
+    "feature_count": 44,
+    "train_end": "2025-09-30",
+    "val_end": "2025-12-31",
+    "test_start": "2026-01-01"
+}

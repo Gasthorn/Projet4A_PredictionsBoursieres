@@ -15,6 +15,18 @@ from services.auth_service import get_user_by_email
 
 dash.register_page(__name__, path="/mon-suivi", name="Mon Suivi")
 
+_MOIS_FR = {
+    1: 'jan.', 2: 'fév.', 3: 'mars', 4: 'avr.', 5: 'mai', 6: 'juin',
+    7: 'juil.', 8: 'août', 9: 'sept.', 10: 'oct.', 11: 'nov.', 12: 'déc.',
+}
+
+def _date_fr(d) -> str:
+    try:
+        t = pd.Timestamp(d) if not isinstance(d, pd.Timestamp) else d
+        return f"{t.day} {_MOIS_FR[t.month]} {t.year}"
+    except Exception:
+        return str(d)
+
 GITHUB_BASE = "https://raw.githubusercontent.com/adam-hassen/stock-auto-update/main/data/articles_sentiment"
 MASTER_URL = f"{GITHUB_BASE}/ALL_ARTICLES_MASTER.csv"
 
@@ -125,7 +137,8 @@ def _run_backtest(ticker, start_amount=500.0, days=180):
             else:
                 losses += 1
             trade_log.append({
-                'date': date_s.strftime('%d %b %Y'),
+                'date': _date_fr(date_s),
+                'date_iso': date_s.strftime('%Y-%m-%d'),
                 'signal': signal,
                 'return_pct': round(pnl_pct * 100, 2),
                 'pnl_eur': round(portfolio * pnl_pct / (1 + pnl_pct) if abs(1 + pnl_pct) > 0.001 else 0, 2),
@@ -152,11 +165,9 @@ def _run_backtest(ticker, start_amount=500.0, days=180):
         'losses': losses,
         'win_rate': round(wins / n * 100) if n > 0 else 0,
         'trades': trade_log[-15:],
-        # Date du premier signal réel (pas du début de la fenêtre de prix)
-        'start_date': trade_log[0]['date'] if trade_log else (dates_out[0].strftime('%d %b %Y') if dates_out else '—'),
-        'data_start': dates_out[0].strftime('%d %b %Y') if dates_out else '—',
-        # Timestamp du premier signal pour aligner le graphique
-        'first_signal_ts': trade_log[0]['date'] if trade_log else None,
+        'start_date': trade_log[0]['date'] if trade_log else (_date_fr(dates_out[0]) if dates_out else '—'),
+        'data_start': _date_fr(dates_out[0]) if dates_out else '—',
+        'first_signal_ts': trade_log[0]['date_iso'] if trade_log else (dates_out[0].strftime('%Y-%m-%d') if dates_out else None),
     }
 
 
@@ -164,65 +175,86 @@ def _run_backtest_lstm(ticker, start_amount=500.0, days=180):
     """
     Backtest LSTM : simule un portefeuille en suivant les prédictions BiLSTM
     en rolling window sur les `days` derniers jours.
-    Une seule inférence batch → résultats en quelques secondes.
+    Architecture : (30, 14 features) + symbol embedding → probabilité.
     """
     try:
         import numpy as np
         import warnings
-        from services.lstm_service import _load
-
-        prices_df = _load_price_history(ticker, days=days + 75)
-        if prices_df.empty or len(prices_df) < 65:
-            return None
+        import yfinance as yf
+        from services.lstm_service import _load, _build_features, FEATURES, SEQ_LEN
 
         model, scaler, encoder = _load()
         try:
             sym_id = int(encoder.transform([ticker])[0])
         except Exception:
+            print(f"[BACKTEST LSTM] {ticker} non trouvé dans l'encodeur")
             return None
 
-        prices_df = prices_df.sort_values('date').reset_index(drop=True)
-        closes   = prices_df['Close'].values
-        dates_arr = prices_df['date'].values
-
-        # Première étape valide : index 60 (besoin de closes[0..60] pour 60 rendements)
-        bt_start = max(60, len(closes) - 1 - days)
-        if bt_start >= len(closes) - 1:
+        # Télécharger assez de données : jours backtest + buffer rolling (30) + SEQ_LEN
+        total_days = days + SEQ_LEN + 50
+        hist = yf.Ticker(ticker).history(period=f"{total_days}d", interval="1d")
+        if hist is None or len(hist) < SEQ_LEN + 30:
             return None
 
-        n_steps = len(closes) - 1 - bt_start
+        # Calculer toutes les features sur l'historique complet
+        df = _build_features(hist).dropna(subset=FEATURES).reset_index(drop=True)
+        if len(df) < SEQ_LEN + 10:
+            return None
 
-        # Construction batch de toutes les séquences d'entrée
-        seqs = np.zeros((n_steps, 60, 1), dtype=np.float32)
-        for k, i in enumerate(range(bt_start, len(closes) - 1)):
-            window  = closes[i - 60: i + 1]
-            returns = np.diff(window) / window[:-1]
-            seqs[k, :, 0] = scaler.transform(returns.reshape(-1, 1)).flatten()
+        closes    = df["close"].values
+        dates_arr = df.index  # après reset_index
+
+        # Récupérer les dates réelles
+        if "Date" in hist.index.names or hasattr(hist.index, "date"):
+            raw_dates = pd.to_datetime(hist.index)
+        else:
+            raw_dates = pd.to_datetime(hist.index)
+
+        # Aligner les dates avec df après dropna
+        df_dates = raw_dates[-len(df):] if len(raw_dates) >= len(df) else pd.date_range(
+            end=pd.Timestamp.today(), periods=len(df), freq="B"
+        )
+
+        # Scaler appliqué sur TOUT le dataframe (pas de fuite de données car on scale tout)
+        feat_all = df[FEATURES].values.astype(np.float32)
+        feat_scaled = np.clip(scaler.transform(feat_all).astype(np.float32), -5, 5)
+
+        # Point de départ du backtest : assez de données après SEQ_LEN
+        bt_start = max(SEQ_LEN, len(df) - days)
+        if bt_start >= len(df) - 1:
+            return None
+
+        n_steps = len(df) - 1 - bt_start
+
+        # Batch de toutes les séquences : shape (n_steps, SEQ_LEN, 14)
+        seqs = np.stack([
+            feat_scaled[i - SEQ_LEN: i]
+            for i in range(bt_start, len(df) - 1)
+        ]).astype(np.float32)
 
         sym_ids_batch = np.full((n_steps, 1), sym_id, dtype=np.int32)
 
-        warnings.filterwarnings('ignore')
-        preds_sc  = model.predict([seqs, sym_ids_batch], verbose=0, batch_size=64)
-        pred_rets = scaler.inverse_transform(preds_sc).flatten()
+        warnings.filterwarnings("ignore")
+        probs = model.predict([seqs, sym_ids_batch], verbose=0, batch_size=64).flatten()
 
-        portfolio     = start_amount
-        buy_hold_ref  = float(closes[bt_start])
+        portfolio    = start_amount
+        buy_hold_ref = float(closes[bt_start])
         dates_out, port_vals, bh_vals, trade_log = [], [], [], []
         wins = losses = 0
 
-        for k, i in enumerate(range(bt_start, len(closes) - 1)):
-            pred_ret   = pred_rets[k]
+        for k, i in enumerate(range(bt_start, len(df) - 1)):
+            prob       = float(probs[k])
             p_start    = float(closes[i])
             p_end      = float(closes[i + 1])
             actual_ret = (p_end - p_start) / p_start
 
-            signal  = 'ACHETER' if pred_ret > 0 else 'VENDRE'
-            pnl_pct = actual_ret if pred_ret > 0 else -actual_ret
+            signal  = "ACHETER" if prob >= 0.52 else "VENDRE"
+            pnl_pct = actual_ret if signal == "ACHETER" else -actual_ret
 
             portfolio *= (1 + pnl_pct)
             bh         = start_amount * (p_end / buy_hold_ref)
 
-            date_s = pd.Timestamp(dates_arr[i])
+            date_s = pd.Timestamp(df_dates[i])
             dates_out.append(date_s)
             port_vals.append(round(portfolio, 2))
             bh_vals.append(round(bh, 2))
@@ -232,10 +264,10 @@ def _run_backtest_lstm(ticker, start_amount=500.0, days=180):
             else:
                 losses += 1
             trade_log.append({
-                'date': date_s.strftime('%d %b %Y'),
-                'signal': signal,
-                'return_pct': round(pnl_pct * 100, 2),
-                'pnl_eur': round(
+                "date":       _date_fr(date_s),
+                "signal":     signal,
+                "return_pct": round(pnl_pct * 100, 2),
+                "pnl_eur":    round(
                     portfolio * pnl_pct / (1 + pnl_pct) if abs(1 + pnl_pct) > 0.001 else 0, 2
                 ),
             })
@@ -245,21 +277,21 @@ def _run_backtest_lstm(ticker, start_amount=500.0, days=180):
 
         n = wins + losses
         return {
-            'dates':          dates_out,
-            'portfolio':      port_vals,
-            'buy_hold':       bh_vals,
-            'final_value':    round(portfolio, 2),
-            'total_return':   round((portfolio - start_amount) / start_amount * 100, 2),
-            'buy_hold_return':round((bh_vals[-1] - start_amount) / start_amount * 100, 2) if bh_vals else 0,
-            'start_amount':   start_amount,
-            'n_trades':       n,
-            'wins':           wins,
-            'losses':         losses,
-            'win_rate':       round(wins / n * 100) if n > 0 else 0,
-            'trades':         trade_log[-15:],
-            'start_date':     dates_out[0].strftime('%d %b %Y'),
-            'data_start':     dates_out[0].strftime('%d %b %Y'),
-            'first_signal_ts':dates_out[0].strftime('%d %b %Y'),
+            "dates":           dates_out,
+            "portfolio":       port_vals,
+            "buy_hold":        bh_vals,
+            "final_value":     round(portfolio, 2),
+            "total_return":    round((portfolio - start_amount) / start_amount * 100, 2),
+            "buy_hold_return": round((bh_vals[-1] - start_amount) / start_amount * 100, 2) if bh_vals else 0,
+            "start_amount":    start_amount,
+            "n_trades":        n,
+            "wins":            wins,
+            "losses":          losses,
+            "win_rate":        round(wins / n * 100) if n > 0 else 0,
+            "trades":          trade_log[-15:],
+            "start_date":      _date_fr(dates_out[0]),
+            "data_start":      _date_fr(dates_out[0]),
+            "first_signal_ts": dates_out[0].strftime("%Y-%m-%d"),
         }
     except Exception as e:
         print(f"[BACKTEST LSTM] {ticker}: {e}")
@@ -866,7 +898,11 @@ layout = html.Div(className="suivi-page", children=[
                 html.Span("01", className="suivi-num"),
                 html.Div([
                     html.H2("Que faire aujourd'hui ?", className="suivi-section-title"),
-                    html.P("Cliquez sur une action pour calculer combien vous pourriez gagner", className="suivi-section-sub"),
+                    html.P(
+                        id="suivi-section01-sub",
+                        children="Cliquez sur une action pour calculer combien vous pourriez gagner",
+                        className="suivi-section-sub",
+                    ),
                 ]),
             ]),
             # ── Mode toggle ──
@@ -880,6 +916,12 @@ layout = html.Div(className="suivi-page", children=[
                 html.Button(
                     [html.I(className="fas fa-brain"), "  Modèle LSTM (prix)"],
                     id="suivi-btn-lstm",
+                    className="home-mode-btn",
+                    n_clicks=0,
+                ),
+                html.Button(
+                    [html.I(className="fas fa-atom"), "  Transformer (hybride)"],
+                    id="suivi-btn-transformer",
                     className="home-mode-btn",
                     n_clicks=0,
                 ),
@@ -1079,21 +1121,60 @@ layout = html.Div(className="suivi-page", children=[
 
 # ==================== CALLBACKS ====================
 
+_SUB01_SENTIMENT    = "Cliquez sur une action pour calculer combien vous pourriez gagner"
+_SUB01_LSTM         = "Prédictions basées sur l'historique des prix — cliquez pour simuler votre investissement"
+_SUB01_TRANSFORMER  = "Prédictions hybrides (prix + actualités) par le Transformer — cliquez pour simuler votre investissement"
+
+
+_LOADING_GRID = html.Div(
+    [html.I(className="fas fa-circle-notch fa-spin"), "  Chargement des prédictions..."],
+    className="suivi-loading",
+)
+
+
 @callback(
-    Output("suivi-btn-sentiment", "className"),
-    Output("suivi-btn-lstm",      "className"),
-    Output("suivi-mode",          "data"),
-    Output("suivi-toast",         "className", allow_duplicate=True),
-    Input("suivi-btn-sentiment",  "n_clicks"),
-    Input("suivi-btn-lstm",       "n_clicks"),
+    Output("suivi-btn-sentiment",   "className",  allow_duplicate=True),
+    Output("suivi-btn-lstm",        "className",  allow_duplicate=True),
+    Output("suivi-btn-transformer", "className",  allow_duplicate=True),
+    Output("suivi-mode",            "data",       allow_duplicate=True),
+    Output("suivi-toast",           "className",  allow_duplicate=True),
+    Output("suivi-section01-sub",   "children",   allow_duplicate=True),
+    Output("suivi-pred-grid",       "children",   allow_duplicate=True),
+    Input("suivi-btn-sentiment",    "n_clicks"),
+    Input("suivi-btn-lstm",         "n_clicks"),
+    Input("suivi-btn-transformer",  "n_clicks"),
     prevent_initial_call=True,
 )
-def toggle_suivi_mode(_s, _l):
+def toggle_suivi_mode(_s, _l, _t):
     active = "home-mode-btn home-mode-active"
     normal = "home-mode-btn"
-    if ctx.triggered_id == "suivi-btn-lstm":
-        return normal, active, "lstm", "suivi-toast"
-    return active, normal, "sentiment", "suivi-toast"
+    tid = ctx.triggered_id
+    if tid == "suivi-btn-lstm":
+        return normal, active, normal, "lstm", "suivi-toast", _SUB01_LSTM, _LOADING_GRID
+    if tid == "suivi-btn-transformer":
+        return normal, normal, active, "transformer", "suivi-toast", _SUB01_TRANSFORMER, _LOADING_GRID
+    return active, normal, normal, "sentiment", "suivi-toast", _SUB01_SENTIMENT, _LOADING_GRID
+
+
+@callback(
+    Output("suivi-btn-sentiment",   "className",  allow_duplicate=True),
+    Output("suivi-btn-lstm",        "className",  allow_duplicate=True),
+    Output("suivi-btn-transformer", "className",  allow_duplicate=True),
+    Output("suivi-mode",            "data",       allow_duplicate=True),
+    Output("suivi-section01-sub",   "children",   allow_duplicate=True),
+    Input("url", "search"),
+    prevent_initial_call=True,
+)
+def sync_mode_from_url(search):
+    active = "home-mode-btn home-mode-active"
+    normal = "home-mode-btn"
+    if search and "mode=lstm" in search:
+        return normal, active, normal, "lstm", _SUB01_LSTM
+    if search and "mode=transformer" in search:
+        return normal, normal, active, "transformer", _SUB01_TRANSFORMER
+    if search and "mode=sentiment" in search:
+        return active, normal, normal, "sentiment", _SUB01_SENTIMENT
+    return no_update, no_update, no_update, no_update, no_update
 
 
 @callback(
@@ -1144,6 +1225,47 @@ def load_pred_data(_init, _auto, mode):
                     }
         return result
 
+    if mode == "transformer":
+        from services.transformer_service import predict as trans_predict
+
+        def _fetch_t(ticker):
+            return ticker, trans_predict(ticker)
+
+        result = {}
+        with ThreadPoolExecutor(max_workers=7) as ex:
+            futures = {ex.submit(_fetch_t, t): t for t in COMPANIES}
+            for f in _as_completed(futures):
+                ticker, pred = f.result()
+                name = COMPANIES[ticker]
+                if pred is None:
+                    result[ticker] = {
+                        'signal': 'NEUTRE', 'score': 0.0, 'confidence': 0.0,
+                        'articles': 0, 'signal_valid_to': '—', 'horizon_label': 'N/A',
+                        'entry_price': 0.0, 'current_price': 0.0, 'change_pct': 0.0,
+                        'entry_date': '', 'current_date': '', 'name': name,
+                        'is_lstm': False, 'is_transformer': True,
+                    }
+                else:
+                    result[ticker] = {
+                        'signal':         'HAUSSIER' if pred['signal'] == 'ACHETER' else 'BAISSIER',
+                        'score':          pred['return_pct'] / 100,
+                        'confidence':     round(abs(pred.get('dir_prob', 0.5) - 0.5) * 200, 1),
+                        'articles':       0,
+                        'signal_valid_to':'Prochain mouvement',
+                        'horizon_label':  f"{pred['return_pct']:+.3f}%",
+                        'entry_price':    pred['current_price'],
+                        'current_price':  pred['predicted_price'],
+                        'change_pct':     pred['return_pct'],
+                        'entry_date':     "Aujourd'hui",
+                        'current_date':   'Prédit',
+                        'name':           name,
+                        'is_lstm':        False,
+                        'is_transformer': True,
+                        'return_pct':     pred['return_pct'],
+                        'dir_prob':       pred.get('dir_prob'),
+                    }
+        return result
+
     # ── Sentiment (défaut) ──
     df = _load_articles()
     result = {}
@@ -1156,7 +1278,7 @@ def load_pred_data(_init, _auto, mode):
 
 @callback(
     Output("suivi-welcome", "children"),
-    Output("suivi-pred-grid", "children"),
+    Output("suivi-pred-grid", "children", allow_duplicate=True),
     Output("suivi-toast", "className", allow_duplicate=True),
     Input("suivi-pred-store", "data"),
     State("session-store", "data"),
@@ -1198,7 +1320,8 @@ def render_predictions(pred_data, session):
         name      = data.get('name', ticker)
         entry_date   = data.get('entry_date', '')
         current_date = data.get('current_date', '')
-        is_lstm   = data.get('is_lstm', False)
+        is_lstm       = data.get('is_lstm', False)
+        is_transformer = data.get('is_transformer', False)
         return_pct = data.get('return_pct', None)
 
         rec_label = _rec_label.get(signal, signal)
@@ -1206,6 +1329,13 @@ def render_predictions(pred_data, session):
         tip_color = _tip_color.get(signal, '#f0c040')
         _tip_border = {'HAUSSIER': 'rgba(0,255,135,0.35)', 'BAISSIER': 'rgba(255,77,109,0.35)', 'NEUTRE': 'rgba(240,192,64,0.35)'}
         tip_border = _tip_border.get(signal, 'rgba(0,240,255,0.35)')
+
+        if is_transformer:
+            date_icon = "fas fa-atom"
+        elif is_lstm:
+            date_icon = "fas fa-brain"
+        else:
+            date_icon = "fas fa-clock"
 
         cards.append(html.Div(className="suivi-pred-card", children=[
             html.Div(className="suivi-card-top", children=[
@@ -1219,18 +1349,20 @@ def render_predictions(pred_data, session):
                 ]),
             ]),
             html.Div(className="suivi-date-row", children=[
-                html.I(className="fas fa-brain" if is_lstm else "fas fa-clock"),
+                html.I(className=date_icon),
                 html.Span(
-                    "Rendement prédit par le modèle LSTM" if is_lstm
-                    else f"Conseil valable jusqu'au {data.get('signal_valid_to', '—')}",
+                    "Rendement prédit — Transformer hybride" if is_transformer
+                    else ("Rendement prédit par le modèle LSTM" if is_lstm
+                    else f"Conseil valable jusqu'au {data.get('signal_valid_to', '—')}"),
                     className="suivi-date-valid"
                 ),
                 html.Span(data.get('horizon_label', '~48h'), className="suivi-date-horizon"),
             ]),
             html.Div(className="suivi-card-footer", children=[
                 html.Span(
-                    [html.I(className="fas fa-microchip"), f"  {return_pct:+.3f}%"] if is_lstm and return_pct is not None
-                    else [html.I(className="fas fa-newspaper"), f"  {articles} articles"],
+                    [html.I(className="fas fa-atom"), f"  {return_pct:+.3f}%"] if is_transformer and return_pct is not None
+                    else ([html.I(className="fas fa-microchip"), f"  {return_pct:+.3f}%"] if is_lstm and return_pct is not None
+                    else [html.I(className="fas fa-newspaper"), f"  {articles} articles"]),
                     className="suivi-card-meta"
                 ),
                 html.Div(className="suivi-card-btns", children=[
@@ -1260,17 +1392,14 @@ def render_predictions(pred_data, session):
                              style={"color": tip_color}),
                     html.Div(f"{name} — {ticker}", className="suivi-pred-tooltip-company"),
                     html.P(_tip_body.get(signal, ''), className="suivi-pred-tooltip-body"),
-                    html.Div(className="suivi-pred-tooltip-prices", children=[
-                        html.Span(f"Le {entry_date} : ${entry:,.2f}" if entry_date else f"Conseil : ${entry:,.2f}",
-                                  className="suivi-pred-tooltip-price-item"),
-                        html.I(className="fas fa-arrow-right", style={"color": "#4a5c7a", "fontSize": "0.7rem"}),
-                        html.Span(f"Auj. ({current_date}) : ${current:,.2f}" if current_date else f"Maintenant : ${current:,.2f}",
-                                  className="suivi-pred-tooltip-price-item"),
-                    ]),
                     html.Div(className="suivi-pred-tooltip-footer", children=[
-                        html.I(className="fas fa-clock"),
-                        html.Span(f" Valable jusqu'au {data.get('signal_valid_to', '—')}"),
-                        html.Span(f" · {articles} articles analysés", style={"opacity": "0.5"}),
+                        html.I(className=date_icon),
+                        html.Span(
+                            f" Prob. directionnelle : {data.get('dir_prob', 0)*100:.0f}%" if is_transformer
+                            else (f" Rendement prédit : {return_pct:+.3f}%" if is_lstm and return_pct is not None
+                            else f" Valable jusqu'au {data.get('signal_valid_to', '—')}")
+                        ),
+                        html.Span(f" · {articles} articles" if not is_lstm and not is_transformer else "", style={"opacity": "0.5"}),
                     ]),
                 ]),
             ]),
@@ -1289,51 +1418,68 @@ def render_kpis(_trigger, _pred, session):
     if not session:
         return []
 
-    stats = get_user_stats(session.get("email"))
+    email = session.get("email")
+    stats = get_user_stats(email)
     total_pnl = stats.get('total_pnl', 0)
+    total_trades = stats.get('total_trades', 0)
 
-    items = [
-        {
-            "icon": "fas fa-chart-line",
-            "label": "Mes gains / pertes au total",
-            "value": f"{total_pnl:+,.2f} €",
-            "cls": "suivi-kpi-pos" if total_pnl >= 0 else "suivi-kpi-neg",
-            "detail": f"{stats.get('win_rate', 0):.1f}% de réussite",
-        },
-        {
-            "icon": "fas fa-list-check",
-            "label": "Investissements enregistrés",
-            "value": str(stats.get('total_trades', 0)),
-            "cls": "",
-            "detail": f"{stats.get('wins', 0)} réussis  •  {stats.get('losses', 0)} perdants",
-        },
-        {
-            "icon": "fas fa-trophy",
-            "label": "Décisions gagnantes",
-            "value": f"{stats.get('win_rate', 0):.1f}%",
-            "cls": "suivi-kpi-pos" if stats.get('win_rate', 0) >= 50 else "suivi-kpi-neg",
-            "detail": "sur les investissements terminés",
-        },
-        {
-            "icon": "fas fa-bolt",
-            "label": "En cours de suivi",
-            "value": str(stats.get('open_trades', 0)),
-            "cls": "",
-            "detail": "investissements actifs",
-        },
-    ]
+    # Count trades by model type
+    all_trades = get_user_trades(email, 200)
+    model_counts = {'sentiment': 0, 'lstm': 0, 'transformer': 0}
+    for t in all_trades:
+        m = (t[13] if len(t) > 13 else None) or 'sentiment'
+        if m in model_counts:
+            model_counts[m] += 1
 
-    return [
-        html.Div(className="suivi-kpi-card", children=[
-            html.Div(className="suivi-kpi-icon", children=html.I(className=k["icon"])),
-            html.Div(className="suivi-kpi-body", children=[
-                html.Span(k["label"], className="suivi-kpi-lbl"),
-                html.Span(k["value"], className=f"suivi-kpi-val {k['cls']}"),
-                html.Span(k["detail"], className="suivi-kpi-detail"),
+    pnl_cls = "suivi-kpi-pos" if total_pnl >= 0 else "suivi-kpi-neg"
+    wr = stats.get('win_rate', 0)
+    wr_cls = "suivi-kpi-pos" if wr >= 50 else "suivi-kpi-neg"
+
+    kpi1 = html.Div(className="suivi-kpi-card", children=[
+        html.Div(className="suivi-kpi-icon", children=html.I(className="fas fa-chart-line")),
+        html.Div(className="suivi-kpi-body", children=[
+            html.Span("Mes gains / pertes au total", className="suivi-kpi-lbl"),
+            html.Span(f"{total_pnl:+,.2f} €", className=f"suivi-kpi-val {pnl_cls}"),
+            html.Span(f"{wr:.1f}% de réussite", className="suivi-kpi-detail"),
+        ]),
+    ])
+
+    kpi2 = html.Div(className="suivi-kpi-card", children=[
+        html.Div(className="suivi-kpi-icon", children=html.I(className="fas fa-list-check")),
+        html.Div(className="suivi-kpi-body", children=[
+            html.Span("Investissements enregistrés", className="suivi-kpi-lbl"),
+            html.Span(str(total_trades), className="suivi-kpi-val"),
+            html.Span(
+                f"{stats.get('wins', 0)} réussis  •  {stats.get('losses', 0)} perdants",
+                className="suivi-kpi-detail",
+            ),
+            html.Div(className="suivi-kpi-models", children=[
+                html.Span(
+                    [html.I(className="fas fa-newspaper"), f"  {model_counts['sentiment']}"],
+                    className="suivi-kpi-model-badge suivi-badge-model-sentiment",
+                ),
+                html.Span(
+                    [html.I(className="fas fa-brain"), f"  {model_counts['lstm']}"],
+                    className="suivi-kpi-model-badge suivi-badge-model-lstm",
+                ),
+                html.Span(
+                    [html.I(className="fas fa-atom"), f"  {model_counts['transformer']}"],
+                    className="suivi-kpi-model-badge suivi-badge-model-transformer",
+                ),
             ]),
-        ])
-        for k in items
-    ]
+        ]),
+    ])
+
+    kpi3 = html.Div(className="suivi-kpi-card", children=[
+        html.Div(className="suivi-kpi-icon", children=html.I(className="fas fa-trophy")),
+        html.Div(className="suivi-kpi-body", children=[
+            html.Span("Décisions gagnantes", className="suivi-kpi-lbl"),
+            html.Span(f"{wr:.1f}%", className=f"suivi-kpi-val {wr_cls}"),
+            html.Span("sur les investissements terminés", className="suivi-kpi-detail"),
+        ]),
+    ])
+
+    return [kpi1, kpi2, kpi3]
 
 
 def _action_classes(action):
@@ -1398,6 +1544,11 @@ def handle_modal(open_clicks, _close, _sim, pred_data):
     name = data['name']
     entry_date = data.get('entry_date', '')
     current_date = data.get('current_date', '')
+    is_lstm = data.get('is_lstm', False)
+    is_transformer = data.get('is_transformer', False)
+    is_predictive = is_lstm or is_transformer
+    return_pct = data.get('return_pct')
+    dir_prob = data.get('dir_prob')
 
     # Action par défaut : suit le signal IA
     default_action = "ACHAT" if signal in ("HAUSSIER", "NEUTRE") else "VENTE"
@@ -1412,36 +1563,109 @@ def handle_modal(open_clicks, _close, _sim, pred_data):
         html.Span(f"  —  {name}", className="suivi-modal-name-txt"),
     ]
 
-    tip_map = {
-        'HAUSSIER': f"L'IA pense que le prix va monter — elle conseille d'acheter {ticker}",
-        'BAISSIER': f"L'IA pense que le prix va baisser — elle conseille de vendre {ticker}",
-        'NEUTRE':   f"L'IA n'est pas sûre pour {ticker} — mieux vaut attendre",
+    _expl = {
+        'HAUSSIER': {
+            'icon': 'fas fa-arrow-trend-up',
+            'color': '#00f0a0',
+            'signal_txt': "Le prix devrait monter",
+            'detail': (
+                f"Notre IA a analysé les dernières actualités et l'évolution du cours de {name}. "
+                f"Elle pense que le prix va augmenter dans les prochains jours. "
+                f"Si vous faites un ACHAT et que le prix monte, vous gagnez de l'argent. "
+                f"Si le prix baisse malgré tout, vous perdez une partie de ce que vous avez investi."
+            ),
+        },
+        'BAISSIER': {
+            'icon': 'fas fa-arrow-trend-down',
+            'color': '#ff4d6d',
+            'signal_txt': "Le prix devrait baisser",
+            'detail': (
+                f"Notre IA a analysé les dernières actualités et l'évolution du cours de {name}. "
+                f"Elle pense que le prix va baisser dans les prochains jours. "
+                f"Si vous faites une VENTE (pari sur la baisse) et que le prix baisse, vous gagnez. "
+                f"Si le prix monte malgré tout, vous perdez une partie de ce que vous avez investi."
+            ),
+        },
+        'NEUTRE': {
+            'icon': 'fas fa-minus',
+            'color': '#f0c040',
+            'signal_txt': "Signal incertain — mieux vaut attendre",
+            'detail': (
+                f"Notre IA n'est pas sûre de la direction du prix de {name}. "
+                f"Les signaux sont contradictoires en ce moment. "
+                f"Il vaut mieux ne rien faire et revenir plus tard quand le signal sera plus clair."
+            ),
+        },
     }
+    expl = _expl.get(signal, _expl['NEUTRE'])
 
     info = html.Div(className="suivi-modal-info-grid", children=[
+
+        # ── Ligne signal ──
         html.Div(className="suivi-modal-signal-row", children=[
             html.Span("Conseil IA :", className="suivi-modal-lbl"),
             html.Span(signal, className=f"suivi-badge {sig_cls}"),
-            html.Span(f"Fiabilité : {conf:.0f}%", className="suivi-modal-conf"),
         ]),
+
+        # ── Explication en langage simple ──
+        html.Div(className="suivi-modal-expl-box", children=[
+            html.Div(className="suivi-modal-expl-header", children=[
+                html.I(className=expl['icon'], style={"color": expl['color']}),
+                html.Strong(expl['signal_txt'], style={"color": expl['color']}),
+            ]),
+            html.P(expl['detail'], className="suivi-modal-expl-body"),
+        ]),
+
+        # ── Prix ──
         html.Div(className="suivi-modal-prices-row", children=[
+            # Colonne gauche
             html.Div(className="suivi-mpi", children=[
-                html.Span(f"Prix réel le {entry_date}" if entry_date else "Prix au conseil", className="suivi-modal-lbl"),
+                html.Span(
+                    (f"Cours au signal ({entry_date})" if entry_date else "Cours au signal")
+                    if not is_predictive else "Cours actuel (aujourd'hui)",
+                    className="suivi-modal-lbl",
+                ),
                 html.Span(f"${entry:,.2f}", className="suivi-modal-price"),
             ]),
             html.I(className="fas fa-arrow-right suivi-modal-arrow"),
-            html.Div(className="suivi-mpi", children=[
-                html.Span(f"Prix réel le {current_date}" if current_date else "Prix aujourd'hui", className="suivi-modal-lbl"),
-                html.Span(f"${current:,.2f}", className="suivi-modal-price"),
+            # Colonne droite
+            html.Div(className=f"suivi-mpi{'  suivi-mpi-predicted' if is_predictive else ''}", children=[
+                html.Span(
+                    (f"Cours aujourd'hui ({current_date})" if current_date else "Cours aujourd'hui")
+                    if not is_predictive else "Prévision pour demain",
+                    className="suivi-modal-lbl",
+                ),
+                html.Span(f"${current:,.2f}", className=f"suivi-modal-price{'  suivi-price-predicted' if is_predictive else ''}"),
             ]),
+            # Évolution / Rendement
             html.Div(className="suivi-mpi", children=[
-                html.Span("Évolution", className="suivi-modal-lbl"),
+                html.Span(
+                    "Rendement estimé (IA)" if is_predictive else "Évolution réelle",
+                    className="suivi-modal-lbl",
+                ),
                 html.Span(f"{change:+.2f}%", className=f"suivi-modal-price {chg_cls}"),
             ]),
         ]),
-        html.Div(className="suivi-modal-tip", children=[
-            html.I(className="fas fa-lightbulb"),
-            f"  {tip_map.get(signal, '')}",
+        # ── Note IA uniquement ──
+        *(
+            [html.Div(className="suivi-modal-price-note", children=[
+                html.I(className="fas fa-robot"),
+                html.Span(
+                    " Notre modèle IA estime le cours de demain. "
+                    "Cette prévision n'est pas une garantie — les marchés restent imprévisibles."
+                ),
+            ])]
+            if is_predictive else []
+        ),
+
+        # ── Comment utiliser ──
+        html.Div(className="suivi-modal-howto", children=[
+            html.I(className="fas fa-circle-info"),
+            html.Span(
+                " Entrez un montant ci-dessous, choisissez ACHAT ou VENTE, puis cliquez "
+                "« Juste voir le résultat » pour simuler — ou « J'ai fait cet investissement » "
+                "pour sauvegarder dans votre historique. Aucun argent réel n'est engagé.",
+            ),
         ]),
     ])
 
@@ -1623,10 +1847,20 @@ def render_history(_trigger, _init, mode, session):
     all_trades = get_user_trades(session.get("email"), 50)
     trades = [t for t in all_trades if (t[13] if len(t) > 13 else 'sentiment') == current_mode]
 
-    mode_label = "Modèle LSTM" if current_mode == "lstm" else "Analyse des actualités"
+    if current_mode == "lstm":
+        mode_label = "Modèle LSTM"
+    elif current_mode == "transformer":
+        mode_label = "Transformer hybride"
+    else:
+        mode_label = "Analyse des actualités"
 
     if not trades:
-        icon = "fas fa-brain" if current_mode == "lstm" else "fas fa-newspaper"
+        if current_mode == "lstm":
+            icon = "fas fa-brain"
+        elif current_mode == "transformer":
+            icon = "fas fa-atom"
+        else:
+            icon = "fas fa-newspaper"
         return html.Div(className="suivi-empty", children=[
             html.I(className=icon, style={"fontSize": "2.5rem", "display": "block", "marginBottom": "12px"}),
             html.P(f"Aucun investissement enregistré avec « {mode_label} »"),
@@ -1668,6 +1902,11 @@ def render_history(_trigger, _init, mode, session):
                 [html.I(className="fas fa-brain"), "  LSTM"],
                 className="suivi-badge-sm suivi-badge-model-lstm",
             )
+        elif trade_model == "transformer":
+            model_badge = html.Span(
+                [html.I(className="fas fa-atom"), "  Transformer"],
+                className="suivi-badge-sm suivi-badge-model-transformer",
+            )
         else:
             model_badge = html.Span(
                 [html.I(className="fas fa-newspaper"), "  Actualités"],
@@ -1690,7 +1929,48 @@ def render_history(_trigger, _init, mode, session):
             html.Td(entry_date),
         ]))
 
+    # ── Période de suivi ──
+    dates_all = [str(t[5])[:10] for t in trades if t[5]]
+    if dates_all:
+        dates_sorted = sorted(dates_all)
+        first_d = pd.to_datetime(dates_sorted[0])
+        last_d  = pd.to_datetime(dates_sorted[-1])
+        span_days = (last_d - first_d).days
+        period_str = (
+            f"{_date_fr(first_d)}  →  {_date_fr(last_d)}"
+            if first_d != last_d else _date_fr(first_d)
+        )
+        duration_str = f"{span_days} jour{'s' if span_days > 1 else ''}" if span_days > 0 else "Aujourd'hui"
+
+        if current_mode == "lstm":
+            period_icon, period_color = "fas fa-brain", "#00d4ff"
+        elif current_mode == "transformer":
+            period_icon, period_color = "fas fa-atom", "#00ffb4"
+        else:
+            period_icon, period_color = "fas fa-newspaper", "#a78bfa"
+
+        period_banner = html.Div(className="suivi-history-period", children=[
+            html.Div(className="suivi-history-period-left", children=[
+                html.I(className="fas fa-calendar-range", style={"color": period_color}),
+                html.Span("Période de suivi", className="suivi-history-period-label"),
+                html.Span(period_str, className="suivi-history-period-range",
+                          style={"color": period_color}),
+            ]),
+            html.Div(className="suivi-history-period-right", children=[
+                html.I(className=period_icon, style={"color": period_color, "opacity": "0.7"}),
+                html.Span(f" {mode_label}", style={"color": period_color, "opacity": "0.7",
+                                                    "fontSize": "0.78rem", "fontWeight": "600"}),
+                html.Span(f" · {len(trades)} trade{'s' if len(trades) > 1 else ''}",
+                          style={"color": "var(--text-muted)", "fontSize": "0.75rem"}),
+                html.Span(f" · {duration_str}",
+                          style={"color": "var(--text-muted)", "fontSize": "0.75rem"}),
+            ]),
+        ])
+    else:
+        period_banner = None
+
     return html.Div(className="suivi-table-wrap", children=[
+        *([period_banner] if period_banner else []),
         html.Table(className="suivi-table", children=[
             html.Thead(html.Tr([
                 html.Th([html.I(className="fas fa-coins"), "  Action"]),
@@ -1921,7 +2201,7 @@ def render_perf_chart(ticker, _refresh, mode, session):
         xaxis=dict(
             gridcolor='rgba(0,240,255,0.06)',
             tickfont=dict(color='#7a8aaa', size=10),
-            tickformat='%d %b',
+            tickformat='%d/%m/%y',
             showgrid=True,
             linecolor='rgba(0,240,255,0.1)',
             zeroline=False,
@@ -2000,6 +2280,9 @@ def render_backtest(ticker, _recalc, user_amount, mode):
     if current_mode == "lstm":
         model_lbl = "modèle BiLSTM"
         sub = f"{amount:,.0f} € investis en suivant les prédictions du modèle BiLSTM sur {company} — simulation rolling sur données réelles"
+    elif current_mode == "transformer":
+        model_lbl = "Transformer hybride"
+        sub = f"{amount:,.0f} € investis en suivant les prédictions du Transformer hybride sur {company} — simulation rolling sur données réelles"
     else:
         model_lbl = "analyse des actualités"
         sub = f"{amount:,.0f} € investis en suivant nos signaux IA sur {company} — évolution historique réelle"
@@ -2007,7 +2290,13 @@ def render_backtest(ticker, _recalc, user_amount, mode):
     if not ticker:
         return title, "Sélectionnez une action depuis les cartes de prédiction", "", [], _empty_fig, []
 
-    bt = (_run_backtest_lstm if current_mode == "lstm" else _run_backtest)(ticker, start_amount=amount, days=180)
+    if current_mode == "transformer":
+        from services.transformer_service import predict_backtest as trans_backtest
+        bt = trans_backtest(ticker, start_amount=amount, days=180)
+    elif current_mode == "lstm":
+        bt = _run_backtest_lstm(ticker, start_amount=amount, days=180)
+    else:
+        bt = _run_backtest(ticker, start_amount=amount, days=180)
     if not bt:
         return title, sub, "", [], _empty_fig, []
 
@@ -2036,7 +2325,7 @@ def render_backtest(ticker, _recalc, user_amount, mode):
     first_signal = bt['start_date']
     data_window = bt['data_start']
     summary = html.Div(className="suivi-bt-summary", children=[
-        html.I(className="fas fa-brain" if current_mode == "lstm" else "fas fa-lightbulb"),
+        html.I(className="fas fa-atom" if current_mode == "transformer" else ("fas fa-brain" if current_mode == "lstm" else "fas fa-lightbulb")),
         html.Span([
             "Si vous aviez investi ",
             html.Strong(f"{amount:,.0f} €", style={"color": "#eaf6ff"}),
@@ -2073,7 +2362,7 @@ def render_backtest(ticker, _recalc, user_amount, mode):
         html.Div(className="suivi-bt-stat", children=[
             html.Div("Décisions gagnantes", className="suivi-bt-slbl"),
             html.Div(f"{bt['win_rate']}%", className=f"suivi-bt-sval {'suivi-bt-pos' if bt['win_rate'] >= 50 else 'suivi-bt-neg'}"),
-            html.Div(f"1er signal : {bt['start_date']}", className="suivi-bt-sdiff"),
+            html.Div(f"Simulation du {bt['start_date']} à auj.", className="suivi-bt-sdiff"),
         ]),
     ])
 
@@ -2084,8 +2373,7 @@ def render_backtest(ticker, _recalc, user_amount, mode):
 
     if bt.get('first_signal_ts') and chart_dates:
         try:
-            from datetime import datetime as _dt
-            first_sig_dt = pd.Timestamp(_dt.strptime(bt['first_signal_ts'], '%d %b %Y'))
+            first_sig_dt = pd.Timestamp(bt['first_signal_ts'])
             chart_from = first_sig_dt - timedelta(days=7)
             mask = [d >= chart_from for d in chart_dates]
             if any(mask):
@@ -2138,7 +2426,7 @@ def render_backtest(ticker, _recalc, user_amount, mode):
             borderwidth=1, font=dict(color='#b8dff0', size=11), x=0.01, y=0.98,
         ),
         xaxis=dict(gridcolor='rgba(0,240,255,0.06)', tickfont=dict(color='#7a8aaa', size=10),
-                   tickformat='%d %b', showgrid=True, zeroline=False),
+                   tickformat='%d/%m/%y', showgrid=True, zeroline=False),
         yaxis=dict(gridcolor='rgba(0,240,255,0.06)', tickfont=dict(color='#7a8aaa', size=10),
                    tickprefix='', ticksuffix=' €', showgrid=True, zeroline=False),
         hovermode='x unified',

@@ -1,4 +1,4 @@
-from dash import html, dcc, Input, Output, State, callback, ctx
+from dash import html, dcc, Input, Output, State, callback, ctx, no_update
 import dash
 import pandas as pd
 import requests
@@ -121,7 +121,7 @@ _TIP_TITLE = {
 }
 
 
-def _sentiment_card(ticker, company, df):
+def _sentiment_card(ticker, company, df, target_href="/mon-suivi"):
     sig      = _compute_signal(df, ticker)
     prices   = _get_price(ticker, signal_date=sig.get('latest_dt'))
     rec      = sig['rec']
@@ -151,7 +151,7 @@ def _sentiment_card(ticker, company, df):
         ]),
         html.A(
             [html.I(className="fas fa-chart-line"), "  Calculer mon investissement"],
-            href="/mon-suivi",
+            href=target_href,
             className="home-pred-btn",
         ),
         html.Div(className="home-pred-tooltip", children=[
@@ -161,17 +161,6 @@ def _sentiment_card(ticker, company, df):
                 html.Div(_TIP_TITLE.get(rec, ''), className="home-pred-tooltip-title", style={"color": tip_color}),
                 html.Div(f"{company} — {ticker}", className="home-pred-tooltip-company"),
                 html.P(tip_body, className="home-pred-tooltip-body"),
-                html.Div(className="home-pred-tooltip-prices", children=[
-                    html.Span(
-                        f"Le {prices['entry_date']} : ${prices['entry']:,.2f}" if prices['entry_date'] else f"Conseil : ${prices['entry']:,.2f}",
-                        className="home-pred-tooltip-price-item"
-                    ),
-                    html.I(className="fas fa-arrow-right", style={"color": "#4a5c7a", "fontSize": "0.7rem"}),
-                    html.Span(
-                        f"Auj. ({prices['current_date']}) : ${prices['current']:,.2f}" if prices['current_date'] else f"Maintenant : ${prices['current']:,.2f}",
-                        className="home-pred-tooltip-price-item"
-                    ),
-                ]),
                 html.Div(className="home-pred-tooltip-footer", children=[
                     html.I(className="fas fa-clock"),
                     html.Span(f" Valable jusqu'au {sig['signal_valid_to']}"),
@@ -181,7 +170,7 @@ def _sentiment_card(ticker, company, df):
     ])
 
 
-def _lstm_card(ticker, company, pred):
+def _lstm_card(ticker, company, pred, target_href="/mon-suivi"):
     if pred is None:
         rec = 'SURVEILLER'
         return_pct      = None
@@ -221,7 +210,7 @@ def _lstm_card(ticker, company, pred):
         ]),
         html.A(
             [html.I(className="fas fa-chart-line"), "  Calculer mon investissement"],
-            href="/mon-suivi",
+            href=target_href,
             className="home-pred-btn",
         ),
         html.Div(className="home-pred-tooltip", children=[
@@ -231,17 +220,6 @@ def _lstm_card(ticker, company, pred):
                 html.Div(_TIP_TITLE.get(rec, ''), className="home-pred-tooltip-title", style={"color": tip_color}),
                 html.Div(f"{company} — {ticker}", className="home-pred-tooltip-company"),
                 html.P(tip_body, className="home-pred-tooltip-body"),
-                html.Div(className="home-pred-tooltip-prices", children=[
-                    html.Span(
-                        f"Prix actuel : ${current_price:,.2f}" if current_price else "Prix actuel : N/A",
-                        className="home-pred-tooltip-price-item"
-                    ),
-                    html.I(className="fas fa-arrow-right", style={"color": "#4a5c7a", "fontSize": "0.7rem"}),
-                    html.Span(
-                        f"Prédit : ${predicted_price:,.2f}" if predicted_price else "Prédit : N/A",
-                        className="home-pred-tooltip-price-item"
-                    ),
-                ]),
                 html.Div(className="home-pred-tooltip-footer", children=[
                     html.I(className="fas fa-microchip"),
                     html.Span(f" Basé sur 60 jours d'historique · {ret_str}"),
@@ -249,6 +227,67 @@ def _lstm_card(ticker, company, pred):
             ]),
         ]),
     ])
+
+def _transformer_card(ticker, company, pred, target_href="/mon-suivi"):
+    if pred is None:
+        rec = 'SURVEILLER'
+        return_pct      = None
+        current_price   = None
+        predicted_price = None
+        dir_prob        = None
+    else:
+        rec             = pred['signal']
+        return_pct      = pred['return_pct']
+        current_price   = pred['current_price']
+        predicted_price = pred['predicted_price']
+        dir_prob        = pred.get('dir_prob')
+
+    tip_color  = _TIP_COLOR.get(rec, '#f0c040')
+    ret_str    = f"{return_pct:+.3f}%" if return_pct is not None else "N/A"
+    dir_str    = f"{dir_prob*100:.1f}%" if dir_prob is not None else "N/A"
+    direction  = "monter" if rec == 'ACHETER' else "baisser"
+    tip_body   = (
+        f"Notre Transformer hybride combine {60} jours d'historique de prix et les dernières "
+        f"actualités financières sur {company}. "
+        f"Il prédit que le cours va {direction} de {abs(return_pct):.3f}% avec une probabilité directionnelle de {dir_str}."
+    ) if return_pct is not None else f"Données insuffisantes pour {company} — le modèle Transformer n'a pas pu produire de signal."
+
+    return html.Div(className=f"home-pred-card {_REC_CARD.get(rec, 'home-pred-watch')}", children=[
+        html.Div(className="home-pred-top", children=[
+            html.Div([
+                html.Div(ticker,  className="home-pred-ticker"),
+                html.Div(company, className="home-pred-company"),
+            ]),
+            html.Span(
+                [html.I(className=_REC_ICON.get(rec, '')), f"  {rec}"],
+                className=f"home-pred-rec {_REC_BADGE.get(rec, 'home-pred-rec-watch')}",
+            ),
+        ]),
+        html.Div(className="home-pred-validity", children=[
+            html.I(className="fas fa-atom"),
+            html.Span("Rendement prédit — Transformer hybride"),
+            html.Span(ret_str, className="home-pred-horizon"),
+        ]),
+        html.A(
+            [html.I(className="fas fa-chart-line"), "  Calculer mon investissement"],
+            href=target_href,
+            className="home-pred-btn",
+        ),
+        html.Div(className="home-pred-tooltip", children=[
+            html.Div(className="home-pred-tooltip-inner", children=[
+                html.I(className=_TIP_ICON.get(rec, 'fas fa-circle-info'),
+                       style={"fontSize": "2rem", "color": tip_color, "marginBottom": "10px"}),
+                html.Div(_TIP_TITLE.get(rec, ''), className="home-pred-tooltip-title", style={"color": tip_color}),
+                html.Div(f"{company} — {ticker}", className="home-pred-tooltip-company"),
+                html.P(tip_body, className="home-pred-tooltip-body"),
+                html.Div(className="home-pred-tooltip-footer", children=[
+                    html.I(className="fas fa-atom"),
+                    html.Span(f" Prob. directionnelle : {dir_str} · {ret_str}"),
+                ]),
+            ]),
+        ]),
+    ])
+
 
 # ==================== LAYOUT ====================
 
@@ -264,13 +303,15 @@ layout = html.Div([
     # ── Recommandations IA ──
     html.Div(className="home-pred-section", children=[
         html.Div(className="home-pred-header", children=[
-            html.Div(className="home-pred-live-badge", children=[
-                html.Span(className="home-pred-pulse"),
-                "CONSEILS IA EN DIRECT",
-            ]),
+            html.Div(
+                id="home-pred-live-badge",
+                className="home-pred-live-badge",
+                children=[html.Span(className="home-pred-pulse"), "CONSEILS IA EN DIRECT"],
+            ),
             html.H2("Que faire aujourd'hui ?", className="home-pred-title"),
             html.P(
-                "Notre IA lit les actualités financières pour vous dire clairement si vous devriez acheter ou vendre — sans jargon.",
+                id="home-pred-subtitle",
+                children="Notre IA lit les actualités financières pour vous dire clairement si vous devriez acheter ou vendre — sans jargon.",
                 className="home-pred-subtitle",
             ),
         ]),
@@ -289,6 +330,12 @@ layout = html.Div([
                 className="home-mode-btn",
                 n_clicks=0,
             ),
+            html.Button(
+                [html.I(className="fas fa-atom"), "  Transformer (hybride)"],
+                id="home-btn-transformer",
+                className="home-mode-btn",
+                n_clicks=0,
+            ),
         ]),
 
         dcc.Loading(
@@ -303,6 +350,12 @@ layout = html.Div([
                 ),
             ),
         ),
+    ]),
+
+    # ── Toast chargement modèle ──
+    html.Div(id="home-toast", className="suivi-toast-hidden", children=[
+        html.Div(className="suivi-toast-ring"),
+        "Chargement en cours...",
     ]),
 
     # ── À propos ──
@@ -380,31 +433,52 @@ layout = html.Div([
 
 # ==================== CALLBACKS ====================
 
+_BADGE_SENTIMENT    = [html.Span(className="home-pred-pulse"), "CONSEILS IA EN DIRECT"]
+_BADGE_LSTM         = [html.Span(className="home-pred-pulse"), "PRÉDICTIONS LSTM EN DIRECT"]
+_BADGE_TRANSFORMER  = [html.Span(className="home-pred-pulse"), "TRANSFORMER HYBRIDE EN DIRECT"]
+_SUB_SENTIMENT      = "Notre IA lit les actualités financières pour vous dire clairement si vous devriez acheter ou vendre — sans jargon."
+_SUB_LSTM           = "Notre modèle BiLSTM analyse les 60 derniers jours de prix pour prédire la direction de chaque action."
+_SUB_TRANSFORMER    = "Notre Transformer hybride combine prix et actualités financières pour une prédiction plus précise du marché."
+
+
 @callback(
-    Output("home-btn-sentiment", "className"),
-    Output("home-btn-lstm",      "className"),
-    Output("home-pred-mode",     "data"),
-    Input("home-btn-sentiment",  "n_clicks"),
-    Input("home-btn-lstm",       "n_clicks"),
+    Output("home-btn-sentiment",   "className"),
+    Output("home-btn-lstm",        "className"),
+    Output("home-btn-transformer", "className"),
+    Output("home-pred-mode",       "data"),
+    Output("home-pred-live-badge", "children"),
+    Output("home-pred-subtitle",   "children"),
+    Output("home-toast",           "className", allow_duplicate=True),
+    Input("home-btn-sentiment",    "n_clicks"),
+    Input("home-btn-lstm",         "n_clicks"),
+    Input("home-btn-transformer",  "n_clicks"),
     prevent_initial_call=True,
 )
-def toggle_mode(n_sent, n_lstm):
+def toggle_mode(n_sent, n_lstm, n_trans):
     active = "home-mode-btn home-mode-active"
     normal = "home-mode-btn"
-    if ctx.triggered_id == "home-btn-lstm":
-        return normal, active, "lstm"
-    return active, normal, "sentiment"
+    tid    = ctx.triggered_id
+    if tid == "home-btn-lstm":
+        return normal, active, normal, "lstm", _BADGE_LSTM, _SUB_LSTM, "suivi-toast"
+    if tid == "home-btn-transformer":
+        return normal, normal, active, "transformer", _BADGE_TRANSFORMER, _SUB_TRANSFORMER, "suivi-toast"
+    return active, normal, normal, "sentiment", _BADGE_SENTIMENT, _SUB_SENTIMENT, "suivi-toast"
 
 
 @callback(
     Output("home-pred-grid", "children"),
+    Output("home-toast",     "className", allow_duplicate=True),
     Input("home-init",       "n_intervals"),
     Input("home-pred-mode",  "data"),
     State("session-store",   "data"),
+    prevent_initial_call='initial_duplicate',
 )
 def render_home_predictions(_, mode, session):
+    mode = mode or "sentiment"
+    href = f"/mon-suivi?mode={mode}"
+
     if not session or not session.get("email"):
-        return html.Div(className="home-pred-login-wall", children=[
+        wall = html.Div(className="home-pred-login-wall", children=[
             html.Div(className="home-pred-login-icon", children=html.I(className="fas fa-lock")),
             html.H3("Connectez-vous pour voir les conseils IA", className="home-pred-login-title"),
             html.P(
@@ -419,8 +493,7 @@ def render_home_predictions(_, mode, session):
                        href="/signup", className="home-pred-login-btn-ghost"),
             ]),
         ])
-
-    mode = mode or "sentiment"
+        return wall, "suivi-toast-hidden"
 
     if mode == "lstm":
         from services.lstm_service import predict as lstm_predict
@@ -429,16 +502,35 @@ def render_home_predictions(_, mode, session):
             return ticker, lstm_predict(ticker)
 
         with ThreadPoolExecutor(max_workers=7) as ex:
-            futures  = {ex.submit(_fetch, t): t for t in _COMPANIES}
-            preds    = {}
+            futures = {ex.submit(_fetch, t): t for t in _COMPANIES}
+            preds   = {}
             for f in as_completed(futures):
                 ticker, result = f.result()
-                preds[ticker] = result
+                preds[ticker]  = result
 
-        return [_lstm_card(ticker, company, preds.get(ticker))
-                for ticker, company in _COMPANIES.items()]
+        cards = [_lstm_card(ticker, company, preds.get(ticker), target_href=href)
+                 for ticker, company in _COMPANIES.items()]
+        return cards, "suivi-toast-hidden"
+
+    if mode == "transformer":
+        from services.transformer_service import predict as trans_predict
+
+        def _fetch_t(ticker):
+            return ticker, trans_predict(ticker)
+
+        with ThreadPoolExecutor(max_workers=7) as ex:
+            futures = {ex.submit(_fetch_t, t): t for t in _COMPANIES}
+            preds   = {}
+            for f in as_completed(futures):
+                ticker, result = f.result()
+                preds[ticker]  = result
+
+        cards = [_transformer_card(ticker, company, preds.get(ticker), target_href=href)
+                 for ticker, company in _COMPANIES.items()]
+        return cards, "suivi-toast-hidden"
 
     # ── Sentiment mode (défaut) ──
-    df = _load_articles()
-    return [_sentiment_card(ticker, company, df)
-            for ticker, company in _COMPANIES.items()]
+    df    = _load_articles()
+    cards = [_sentiment_card(ticker, company, df, target_href=href)
+             for ticker, company in _COMPANIES.items()]
+    return cards, "suivi-toast-hidden"

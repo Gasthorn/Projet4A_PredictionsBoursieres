@@ -117,7 +117,7 @@
    ================================================================ */
 .suivi-kpi-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 18px;
   margin-bottom: 48px;
 }
@@ -815,6 +815,46 @@ div.suivi-ticker-dd div.Select-control {
   background: var(--glass);
 }
 
+/* ── Bandeau période de suivi ── */
+.suivi-history-period {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(0, 240, 255, 0.04);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.suivi-history-period-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.suivi-history-period-label {
+  font-size: 0.73rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.suivi-history-period-range {
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.suivi-history-period-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .suivi-table {
   width: 100%;
   border-collapse: collapse;
@@ -1014,6 +1054,90 @@ div.suivi-ticker-dd div.Select-control {
   border: 1px solid rgba(0, 240, 255, 0.18);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
+}
+
+/* ── Explanation box ── */
+.suivi-modal-expl-box {
+  background: rgba(10, 20, 50, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.12);
+  border-left: 3px solid rgba(0, 240, 255, 0.5);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suivi-modal-expl-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.suivi-modal-expl-body {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── Price note (below prices row) ── */
+.suivi-modal-price-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: rgba(180, 200, 230, 0.55);
+  line-height: 1.5;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(255,255,255,0.08);
+}
+
+.suivi-modal-price-note i {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: rgba(0, 240, 255, 0.4);
+}
+
+/* ── Predicted price column highlight ── */
+.suivi-mpi-predicted {
+  position: relative;
+}
+
+.suivi-price-predicted {
+  color: var(--cyan) !important;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+/* ── Direction probability badge ── */
+.suivi-modal-dirprob {
+  font-size: 0.73rem;
+  color: rgba(0, 240, 255, 0.7);
+  margin-top: 2px;
+}
+
+/* ── How-to hint ── */
+.suivi-modal-howto {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: rgba(180, 200, 230, 0.55);
+  line-height: 1.5;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(255,255,255,0.08);
+}
+
+.suivi-modal-howto i {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: rgba(0, 240, 255, 0.4);
 }
 
 /* ── Amount input ── */
@@ -1633,4 +1757,30 @@ div.suivi-ticker-dd div.Select-control {
   background: rgba(160, 80, 255, 0.1);
   border-color: rgba(160, 80, 255, 0.3);
   color: #c4a0ff;
+}
+
+.suivi-badge-model-transformer {
+  background: rgba(0, 255, 180, 0.08);
+  border-color: rgba(0, 255, 180, 0.3);
+  color: #00ffb4;
+}
+
+/* KPI model breakdown row */
+.suivi-kpi-models {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.suivi-kpi-model-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
