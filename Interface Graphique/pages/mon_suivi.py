@@ -1310,8 +1310,13 @@ def render_predictions(pred_data, session):
         'NEUTRE': "Les signaux sont encore flous. Notre IA n'est pas assez sûre pour te donner un conseil clair. Reviens dans quelques heures.",
     }
 
+    # Itérer sur COMPANIES (ordre fixe) plutôt que pred_data
+    # (pred_data est rempli par ThreadPoolExecutor → ordre aléatoire selon complétion)
     cards = []
-    for ticker, data in pred_data.items():
+    for ticker in COMPANIES:
+        data = pred_data.get(ticker)
+        if data is None:
+            continue
         signal = data.get('signal', 'NEUTRE')
         entry = data.get('entry_price', 0)
         current = data.get('current_price', 0)
