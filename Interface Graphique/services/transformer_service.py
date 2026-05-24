@@ -4,17 +4,26 @@ Modèle PyTorch entraîné sur 44 features : OHLCV, indicateurs techniques et sc
 """
 
 import os
+import json
 import math
 import warnings
 import numpy as np
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_BASE = os.path.dirname(os.path.dirname(_HERE))
-_PT   = os.path.join(_BASE, "Model AI Transformer", "transformer_model.pt")
+_HERE    = os.path.dirname(os.path.abspath(__file__))
+_BASE    = os.path.dirname(os.path.dirname(_HERE))
+_DIR     = os.path.join(_BASE, "Model AI Transformer")
+_PT      = os.path.join(_DIR, "transformer_model.pt")   # ← vrai modèle PyTorch
+_SCALER  = os.path.join(_DIR, "feature_scaler.save")
+_CFG     = os.path.join(_DIR, "config.json")
+_FCOLS   = os.path.join(_DIR, "feature_cols.json")
 
-_model      = None
-_checkpoint = None
+_model          = None
+_scaler         = None
+_encoder        = None
+_cfg            = None
 _articles_cache = {'df': None, 'ts': 0}
+
+_ENCODER = os.path.join(_DIR, "symbol_encoder.save")
 
 _MOIS_FR = {
     1: 'jan.', 2: 'fév.', 3: 'mars', 4: 'avr.', 5: 'mai', 6: 'juin',
@@ -35,66 +44,167 @@ _GITHUB_MASTER = (
 )
 
 
-# ─────────────────────── Model definition ────────────────────────
+# ─────────────────────── Wrapper scaler (dict → sklearn-like) ────────────────
 
-def _build_model():
+class _DictScaler:
+    """Wrapper pour un scaler sauvegardé sous forme de dict plutôt que sklearn."""
+    def __init__(self, d: dict):
+        keys = set(d.keys())
+        # StandardScaler
+        if 'mean_' in keys and 'scale_' in keys:
+            self._mean  = np.array(d['mean_'],  dtype=np.float32)
+            self._scale = np.array(d['scale_'], dtype=np.float32)
+            self._type  = 'standard'
+        elif 'mean' in keys and ('scale' in keys or 'std' in keys):
+            self._mean  = np.array(d['mean'],               dtype=np.float32)
+            self._scale = np.array(d.get('scale', d.get('std')), dtype=np.float32)
+            self._type  = 'standard'
+        # RobustScaler
+        elif 'center_' in keys and 'scale_' in keys:
+            self._mean  = np.array(d['center_'], dtype=np.float32)
+            self._scale = np.array(d['scale_'],  dtype=np.float32)
+            self._type  = 'standard'
+        elif 'center' in keys and 'scale' in keys:
+            self._mean  = np.array(d['center'], dtype=np.float32)
+            self._scale = np.array(d['scale'],  dtype=np.float32)
+            self._type  = 'standard'
+        # MinMaxScaler
+        elif 'data_min_' in keys and 'data_max_' in keys:
+            self._min   = np.array(d['data_min_'], dtype=np.float32)
+            self._range = np.array(d['data_max_'], dtype=np.float32) - self._min
+            self._type  = 'minmax'
+        elif 'min' in keys and 'max' in keys:
+            self._min   = np.array(d['min'], dtype=np.float32)
+            self._range = np.array(d['max'], dtype=np.float32) - self._min
+            self._type  = 'minmax'
+        else:
+            raise ValueError(f"[TRANSFORMER] Format scaler dict inconnu — clés: {list(keys)}")
+
+    def transform(self, X):
+        X = np.array(X, dtype=np.float32)
+        if self._type == 'standard':
+            return (X - self._mean) / (self._scale + 1e-9)
+        else:
+            return (X - self._min) / (self._range + 1e-9)
+
+    def inverse_transform(self, X):
+        X = np.array(X, dtype=np.float32)
+        if self._type == 'standard':
+            return X * self._scale + self._mean
+        else:
+            return X * self._range + self._min
+
+
+# ─────────────────────── Architecture PyTorch ────────────────────────────────
+
+def _get_torch():
     import torch
     import torch.nn as nn
 
     class _PE(nn.Module):
-        def __init__(self, d_model, max_len=5000):
+        def __init__(self, d, maxlen=512, drop=0.1):
             super().__init__()
-            pe  = torch.zeros(1, max_len, d_model)
-            pos = torch.arange(0, max_len).float().unsqueeze(1)
-            div = torch.exp(
-                torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
-            )
-            pe[0, :, 0::2] = torch.sin(pos * div)
-            pe[0, :, 1::2] = torch.cos(pos * div)
-            self.register_buffer('pe', pe)
-
+            self.drop = nn.Dropout(drop)
+            pe = torch.zeros(maxlen, d)
+            pos = torch.arange(maxlen).unsqueeze(1).float()
+            div = torch.exp(torch.arange(0, d, 2).float() * (-math.log(10000.0) / d))
+            pe[:, 0::2] = torch.sin(pos * div)
+            if d % 2 == 0:
+                pe[:, 1::2] = torch.cos(pos * div)
+            else:
+                pe[:, 1::2] = torch.cos(pos * div[:-1])
+            self.register_buffer('pe', pe.unsqueeze(0))
         def forward(self, x):
-            return x + self.pe[:, :x.size(1), :]
+            return self.drop(x + self.pe[:, :x.size(1)])
 
-    class _Transformer(nn.Module):
-        def __init__(self):
+    class HybridTransformerBounded(nn.Module):
+        def __init__(self, d_input=44, d_model=64, nhead=4, num_layers=2,
+                     dropout=0.15, num_symbols=8, max_logret=0.05):
             super().__init__()
-            self.input_proj = nn.Linear(44, 64)
-            self.pos        = _PE(64)
-            layer = nn.TransformerEncoderLayer(
-                d_model=64, nhead=4, dim_feedforward=256,
-                dropout=0.0, batch_first=True
+            self.max_logret  = max_logret
+            self.input_proj  = nn.Linear(d_input, d_model)
+            self.symbol_emb  = nn.Embedding(num_symbols, d_model)
+            self.pos_enc     = _PE(d_model, drop=dropout)
+            enc = nn.TransformerEncoderLayer(d_model, nhead,
+                                             dim_feedforward=d_model * 4,
+                                             dropout=dropout,
+                                             batch_first=True)
+            self.transformer = nn.TransformerEncoder(enc, num_layers)
+            self.head = nn.Sequential(
+                nn.LayerNorm(d_model),
+                nn.Linear(d_model, d_model // 2),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model // 2, 1),
             )
-            self.encoder  = nn.TransformerEncoder(layer, num_layers=2)
-            self.norm     = nn.LayerNorm(64)
-            self.dir_head = nn.Linear(64, 1)
-            self.amp_head = nn.Linear(64, 1)
+        def forward(self, x, sym):
+            if sym.dim() > 1:
+                sym = sym.squeeze(-1)
+            x = self.input_proj(x) + self.symbol_emb(sym).unsqueeze(1)
+            x = self.pos_enc(x)
+            x = self.transformer(x)
+            return torch.tanh(self.head(x[:, -1, :])) * self.max_logret
 
-        def forward(self, x):
-            x     = self.input_proj(x)
-            x     = self.pos(x)
-            x     = self.encoder(x)
-            x     = self.norm(x[:, -1, :])
-            dir_p = torch.sigmoid(self.dir_head(x))
-            amp   = torch.tanh(self.amp_head(x))
-            return dir_p, amp
+    return torch, HybridTransformerBounded
 
-    return _Transformer()
 
+# ─────────────────────── Chargement modèle PyTorch ───────────────────────────
 
 def _load():
-    global _model, _checkpoint
+    global _model, _scaler, _encoder, _cfg
     if _model is not None:
-        return _model, _checkpoint
-    import torch
-    warnings.filterwarnings('ignore')
-    ckpt = torch.load(_PT, map_location='cpu', weights_only=False)
-    m    = _build_model()
-    m.load_state_dict(ckpt['model_state_dict'])
-    m.eval()
-    _model      = m
-    _checkpoint = ckpt
-    return _model, _checkpoint
+        return _model, _scaler, _encoder, _cfg
+
+    import joblib
+    torch, HybridTransformerBounded = _get_torch()
+
+    raw_sc   = joblib.load(_SCALER)
+    _scaler  = _DictScaler(raw_sc) if isinstance(raw_sc, dict) else raw_sc
+    _encoder = joblib.load(_ENCODER)
+    with open(_CFG, 'r') as f:
+        _cfg = json.load(f)
+
+    num_symbols = len(_encoder.classes_)
+
+    # Chargement unique avec weights_only=False (fichier de confiance — projet local)
+    # PyTorch 2.6 refuse weights_only=True si le checkpoint contient des numpy arrays
+    err_msg = "inconnu"
+    try:
+        loaded = torch.load(_PT, map_location='cpu', weights_only=False)
+
+        # Cas 1 : torch.save(model, ...) — objet complet
+        if hasattr(loaded, 'eval'):
+            _model = loaded
+            _model.eval()
+            print(f"[TRANSFORMER] Modèle PyTorch (full) chargé ✓  symboles={num_symbols}")
+            return _model, _scaler, _encoder, _cfg
+
+        # Cas 2 : torch.save({'model_state_dict': ..., ...}) ou state dict direct
+        checkpoint = loaded if isinstance(loaded, dict) else {}
+        state = checkpoint.get('model_state_dict', checkpoint)
+        print(f"[TRANSFORMER] Checkpoint dict — clés: {list(checkpoint.keys())[:6]}")
+
+        model = HybridTransformerBounded(
+            d_input     = _cfg.get('feature_count', 44),
+            d_model     = _cfg.get('d_model', 64),
+            nhead       = _cfg.get('nhead', 4),
+            num_layers  = _cfg.get('num_layers', 2),
+            dropout     = _cfg.get('dropout', 0.15),
+            num_symbols = num_symbols,
+            max_logret  = _cfg.get('max_logret', 0.05),
+        )
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        if missing:
+            print(f"[TRANSFORMER] Clés manquantes: {missing[:5]}")
+        model.eval()
+        _model = model
+        print(f"[TRANSFORMER] Modèle PyTorch (state dict) chargé ✓  symboles={num_symbols}")
+        return _model, _scaler, _encoder, _cfg
+
+    except Exception as exc:
+        err_msg = str(exc)
+        print(f"[TRANSFORMER] _load() ERREUR: {err_msg}")
+        raise RuntimeError(f"Impossible de charger transformer_model.pt : {err_msg}")
 
 
 # ─────────────────────── Articles ────────────────────────
@@ -109,16 +219,17 @@ def _get_articles():
         resp = requests.get(_GITHUB_MASTER, timeout=12)
         if resp.status_code == 200:
             df = pd.read_csv(StringIO(resp.text))
+            # tz_convert(None) retire le timezone sans crash si déjà tz-aware
             df['date_publication'] = (
                 pd.to_datetime(df['date_publication'], errors='coerce', utc=True)
-                .dt.tz_localize(None)
+                .dt.tz_convert(None)
             )
             df = df.dropna(subset=['date_publication', 'score_sentiment'])
             _articles_cache['df'] = df
             _articles_cache['ts'] = now
             return df
     except Exception as e:
-        print(f"[TRANSFORMER] Articles: {e}")
+        print(f"[TRANSFORMER] Articles erreur: {e}")
     return _articles_cache['df'] if _articles_cache['df'] is not None else __import__('pandas').DataFrame()
 
 
@@ -219,16 +330,25 @@ def _build_features(ticker: str, df_price, df_articles):
 
 def predict(symbol: str) -> dict | None:
     """
-    Prédit le log-rendement du lendemain avec le Transformer hybride.
+    Prédit le log-rendement du lendemain avec le HybridTransformerBounded (PyTorch).
     Retourne {'return_pct', 'signal', 'current_price', 'predicted_price', 'dir_prob'} ou None.
     """
+    import traceback
     try:
-        import torch, yfinance as yf, pandas as pd
+        import yfinance as yf, pandas as pd
 
-        model, ckpt = _load()
+        print(f"[TRANSFORMER] Chargement modèle pour {symbol}...")
+        model, scaler, encoder, cfg = _load()
+        window = cfg.get('window', 60)
+        max_lr = cfg.get('max_logret', 0.05)
+        print(f"[TRANSFORMER] Modèle chargé — window={window}, max_lr={max_lr}")
+
         hist = yf.Ticker(symbol).history(period='150d', interval='1d')
+        print(f"[TRANSFORMER] {symbol}: {len(hist)} jours de données")
         if len(hist) < 65:
+            print(f"[TRANSFORMER] {symbol}: données insuffisantes ({len(hist)} < 65)")
             return None
+
         try:
             hist.index = pd.to_datetime(hist.index).tz_localize(None)
         except Exception:
@@ -238,26 +358,33 @@ def predict(symbol: str) -> dict | None:
         df_price.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
 
         df_feat = _build_features(symbol, df_price, _get_articles())
-        if len(df_feat) < 60:
+        print(f"[TRANSFORMER] {symbol}: {len(df_feat)} lignes features buildées")
+        if len(df_feat) < window:
+            print(f"[TRANSFORMER] {symbol}: features insuffisantes ({len(df_feat)} < {window})")
             return None
 
-        X = df_feat[_FEATURE_COLS].values[-60:].astype(np.float32)
+        X      = df_feat[_FEATURE_COLS].values[-window:].astype(np.float32)
+        X_norm = np.nan_to_num(scaler.transform(X)).reshape(1, window, len(_FEATURE_COLS))
 
-        mean     = np.array(ckpt['scaler_mean'], dtype=np.float32)
-        std      = np.array(ckpt['scaler_std'],  dtype=np.float32)
-        std_safe = np.where(std < 1e-9, 1.0, std)
-        X_norm   = np.nan_to_num((X - mean) / std_safe)
+        try:
+            sym_id = int(encoder.transform([symbol])[0])
+        except Exception:
+            sym_id = 0
+            print(f"[TRANSFORMER] {symbol} non trouvé dans l'encodeur, sym_id=0")
+        print(f"[TRANSFORMER] {symbol}: input shape={X_norm.shape}, sym_id={sym_id}")
 
-        t = torch.tensor(X_norm).unsqueeze(0)
+        # ── Inférence PyTorch ──────────────────────────────────────────────────
+        torch, _ = _get_torch()
         with torch.no_grad():
-            dir_p, amp = model(t)
+            X_t   = torch.FloatTensor(X_norm)       # (1, window, 44)
+            Xs_t  = torch.LongTensor([[sym_id]])     # (1, 1)
+            out   = model(X_t, Xs_t)                 # (1, 1)
+            logret = float(out.squeeze().item())
 
-        dir_prob = float(dir_p.item())
-        amp_val  = float(amp.item())
-        max_lr   = float(ckpt['max_logret'])
-        logret   = (2 * dir_prob - 1) * abs(amp_val) * max_lr
+        dir_prob = min(1.0, max(0.0, 0.5 + logret / (2 * max_lr + 1e-9)))
         ret_pct  = (math.exp(logret) - 1) * 100
         current  = float(hist['Close'].iloc[-1])
+        print(f"[TRANSFORMER] {symbol}: dir_prob={dir_prob:.3f}, logret={logret:.4f}, ret_pct={ret_pct:.3f}%")
 
         return {
             'return_pct':      round(ret_pct, 3),
@@ -267,7 +394,8 @@ def predict(symbol: str) -> dict | None:
             'dir_prob':        round(dir_prob, 3),
         }
     except Exception as e:
-        print(f"[TRANSFORMER] {symbol}: {e}")
+        print(f"[TRANSFORMER] {symbol} ERREUR: {e}")
+        traceback.print_exc()
         return None
 
 
@@ -277,9 +405,11 @@ def predict_backtest(ticker: str, start_amount: float = 500.0, days: int = 180) 
     Toutes les inférences sont faites en un seul appel batch.
     """
     try:
-        import torch, yfinance as yf, pandas as pd
+        import yfinance as yf, pandas as pd
 
-        model, ckpt = _load()
+        model, scaler, encoder, cfg = _load()
+        window = cfg.get('window', 60)
+        max_lr = cfg.get('max_logret', 0.05)
 
         hist = yf.Ticker(ticker).history(period=f'{days + 120}d', interval='1d')
         if len(hist) < 65:
@@ -293,36 +423,42 @@ def predict_backtest(ticker: str, start_amount: float = 500.0, days: int = 180) 
         df_price.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
 
         df_feat = _build_features(ticker, df_price, _get_articles())
-        if len(df_feat) < 65:
+        if len(df_feat) < window + 5:
             return None
 
-        mean     = np.array(ckpt['scaler_mean'], dtype=np.float32)
-        std      = np.array(ckpt['scaler_std'],  dtype=np.float32)
-        std_safe = np.where(std < 1e-9, 1.0, std)
-        max_lr   = float(ckpt['max_logret'])
+        feat_mat = np.nan_to_num(
+            scaler.transform(df_feat[_FEATURE_COLS].values.astype(np.float32))
+        )
+        closes = df_feat['close'].values
+        dates  = df_feat['date_only'].values
 
-        feat_mat = df_feat[_FEATURE_COLS].values.astype(np.float32)
-        closes   = df_feat['close'].values
-        dates    = df_feat['date_only'].values
-
-        bt_start = max(60, len(feat_mat) - 1 - days)
+        bt_start = max(window, len(feat_mat) - 1 - days)
         if bt_start >= len(feat_mat) - 1:
             return None
         n_steps = len(feat_mat) - 1 - bt_start
 
-        # ── Batch all sequences ──
-        seqs = np.zeros((n_steps, 60, 44), dtype=np.float32)
-        for k, i in enumerate(range(bt_start, len(feat_mat) - 1)):
-            window = feat_mat[i - 60: i]
-            seqs[k] = np.nan_to_num((window - mean) / std_safe)
+        # ── Symbol ID ──
+        try:
+            sym_id = int(encoder.transform([ticker])[0])
+        except Exception:
+            sym_id = 0
 
+        # ── Batch toutes les séquences ──
+        seqs = np.stack([
+            feat_mat[i - window: i]
+            for i in range(bt_start, len(feat_mat) - 1)
+        ]).astype(np.float32)   # (n_steps, window, 44)
+        sym_ids_batch = np.full((n_steps, 1), sym_id, dtype=np.int32)
+
+        # ── Inférence PyTorch batch ────────────────────────────────────────────
+        torch, _ = _get_torch()
         with torch.no_grad():
-            t_seqs = torch.tensor(seqs)
-            dir_ps, amps = model(t_seqs)
-
-        dir_ps = dir_ps.numpy().flatten()
-        amps   = amps.numpy().flatten()
-        logrets = (2 * dir_ps - 1) * np.abs(amps) * max_lr
+            seqs_t  = torch.FloatTensor(seqs)              # (n, window, 44)
+            sym_t   = torch.LongTensor(sym_ids_batch)       # (n, 1)
+            out     = model(seqs_t, sym_t)                  # (n, 1)
+            logrets = out.squeeze().numpy()                 # (n,) ou scalar si n=1
+            if logrets.ndim == 0:
+                logrets = np.array([float(logrets)])
 
         portfolio    = start_amount
         buy_hold_ref = float(closes[bt_start])
