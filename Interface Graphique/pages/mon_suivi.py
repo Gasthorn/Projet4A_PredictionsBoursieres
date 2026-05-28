@@ -868,6 +868,7 @@ layout = html.Div(className="suivi-page", children=[
     dcc.Store(id="suivi-modal-action", data="ACHAT"),
     dcc.Store(id="suivi-refresh", data=0),
     dcc.Store(id="suivi-backtest-ticker-store", data="AAPL"),
+    dcc.Store(id="suivi-url-ticker"),
     dcc.Download(id="suivi-report-download"),
     dcc.Interval(id="suivi-init", interval=300, n_intervals=0, max_intervals=1),
     dcc.Interval(id="suivi-auto", interval=5 * 60 * 1000, n_intervals=0),
@@ -1163,7 +1164,7 @@ def toggle_suivi_mode(_s, _l, _t):
     Output("suivi-mode",            "data",       allow_duplicate=True),
     Output("suivi-section01-sub",   "children",   allow_duplicate=True),
     Input("url", "search"),
-    prevent_initial_call=True,
+    prevent_initial_call="initial_duplicate",
 )
 def sync_mode_from_url(search):
     active = "home-mode-btn home-mode-active"
@@ -1178,13 +1179,51 @@ def sync_mode_from_url(search):
 
 
 @callback(
+    Output("suivi-url-ticker", "data"),
+    Input("url", "search"),
+    prevent_initial_call=False,
+)
+def read_ticker_from_url(search):
+    if not search:
+        return None
+    try:
+        from urllib.parse import parse_qs
+        params = parse_qs(search.lstrip('?'))
+        t = params.get('ticker', [None])[0]
+        return t.upper() if t else None
+    except Exception:
+        return None
+
+
+@callback(
+    Output("suivi-backtest-bg",           "className",  allow_duplicate=True),
+    Output("suivi-backtest-ticker-store", "data",       allow_duplicate=True),
+    Input("suivi-pred-store", "data"),
+    State("suivi-url-ticker", "data"),
+    prevent_initial_call=True,
+)
+def auto_open_backtest_from_url(pred_data, url_ticker):
+    if not url_ticker or not pred_data:
+        return no_update, no_update
+    if url_ticker not in pred_data:
+        return no_update, no_update
+    return "suivi-modal-visible", url_ticker
+
+
+@callback(
     Output("suivi-pred-store", "data"),
     Input("suivi-init",  "n_intervals"),
     Input("suivi-auto",  "n_intervals"),
     Input("suivi-mode",  "data"),
+    State("url",         "search"),
 )
-def load_pred_data(_init, _auto, mode):
+def load_pred_data(_init, _auto, mode, url_search):
     from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+    # L'URL est prioritaire sur le store (évite le flash "sentiment" au chargement)
+    if url_search:
+        if "mode=lstm"        in url_search: mode = "lstm"
+        elif "mode=transformer" in url_search: mode = "transformer"
+        elif "mode=sentiment"   in url_search: mode = "sentiment"
     mode = mode or "sentiment"
 
     if mode == "lstm":
@@ -1305,9 +1344,9 @@ def render_predictions(pred_data, session):
         'NEUTRE': "Pas encore — attendez",
     }
     _tip_body = {
-        'HAUSSIER': "Notre IA a analysé les dernières actualités et les signaux sont positifs. Les investisseurs réagissent bien — c'est un bon moment pour investir.",
-        'BAISSIER': "Les actualités récentes sont mauvaises pour cette entreprise. Notre IA a repéré des signaux négatifs — le cours risque de baisser. Mieux vaut attendre.",
-        'NEUTRE': "Les signaux sont encore flous. Notre IA n'est pas assez sûre pour te donner un conseil clair. Reviens dans quelques heures.",
+        'HAUSSIER': "Notre IA a analysé l'historique de prix et les actualités récentes. Les signaux sont positifs — c'est un bon moment pour investir.",
+        'BAISSIER': "Notre IA a analysé l'historique de prix et les actualités récentes. Les signaux sont négatifs — le cours risque de baisser. Mieux vaut attendre.",
+        'NEUTRE': "Les signaux sont encore flous. Notre IA n'est pas assez sûre pour donner un conseil clair. Reviens dans quelques heures.",
     }
 
     # Itérer sur COMPANIES (ordre fixe) plutôt que pred_data
@@ -1400,7 +1439,7 @@ def render_predictions(pred_data, session):
                     html.Div(className="suivi-pred-tooltip-footer", children=[
                         html.I(className=date_icon),
                         html.Span(
-                            f" Prob. directionnelle : {data.get('dir_prob', 0)*100:.0f}%" if is_transformer
+                            f" Rendement prédit : {return_pct:+.3f}%" if is_transformer and return_pct is not None
                             else (f" Rendement prédit : {return_pct:+.3f}%" if is_lstm and return_pct is not None
                             else f" Valable jusqu'au {data.get('signal_valid_to', '—')}")
                         ),
@@ -1500,7 +1539,7 @@ def _action_hint(action, signal):
     else:
         label = "Vous vendez — vous misez sur une baisse du prix"
     icon_cls = "fas fa-circle-check suivi-hint-ok" if follows else "fas fa-triangle-exclamation suivi-hint-warn"
-    suffix = " (suit le conseil IA ✓)" if follows else " (à l'opposé du conseil IA)"
+    suffix = " (suit le conseil IA)" if follows else " (à l'opposé du conseil IA)"
     return html.Span([html.I(className=icon_cls), f"  {label}{suffix}"], className="suivi-action-hint-inner")
 
 
@@ -2128,7 +2167,7 @@ def render_perf_chart(ticker, _refresh, mode, session):
             + f"<br><b>Résultat : {'+' if pnl >= 0 else ''}{pnl:,.2f} € ({pnl_pct:+.2f}%)</b>"
         )
 
-        label = f"{'✓ Gagné' if pnl >= 0 else '✗ Perdu'} {pnl:+.0f}€"
+        label = f"{'Gagné' if pnl >= 0 else 'Perdu'} {pnl:+.0f}€"
         color = '#00ff87' if pnl >= 0 else '#ff4d6d'
 
         # Ligne verticale au moment de l'investissement
@@ -2168,7 +2207,7 @@ def render_perf_chart(ticker, _refresh, mode, session):
         fig.add_trace(go.Scatter(
             x=win_x, y=win_y,
             mode='markers',
-            name='✓ Vous avez gagné',
+            name='Vous avez gagné',
             marker=dict(color='#00ff87', size=14, symbol='triangle-up',
                         line=dict(color='#010214', width=1.5)),
             hovertemplate='%{customdata}<extra></extra>',
@@ -2179,7 +2218,7 @@ def render_perf_chart(ticker, _refresh, mode, session):
         fig.add_trace(go.Scatter(
             x=loss_x, y=loss_y,
             mode='markers',
-            name='✗ Vous avez perdu',
+            name='Vous avez perdu',
             marker=dict(color='#ff4d6d', size=14, symbol='triangle-down',
                         line=dict(color='#010214', width=1.5)),
             hovertemplate='%{customdata}<extra></extra>',

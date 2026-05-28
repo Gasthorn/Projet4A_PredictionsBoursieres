@@ -36,8 +36,8 @@ def refresh_pending(n):
                 html.Span(f"Gain: +{gain}€" if gain else ""),
             ]),
             html.Div(className="testimonial-actions", children=[
-                html.Button("✅ Approuver", id=f"approve-{t_id}", className="approve-btn"),
-                html.Button("❌ Rejeter", id=f"reject-{t_id}", className="reject-btn"),
+                html.Button("Approuver", id=f"approve-{t_id}", className="approve-btn"),
+                html.Button("Rejeter", id=f"reject-{t_id}", className="reject-btn"),
             ]),
         ])
         cards.append(card)

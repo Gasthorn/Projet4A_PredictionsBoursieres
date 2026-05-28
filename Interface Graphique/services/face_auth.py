@@ -21,13 +21,13 @@ try:
         test_window = cv2.namedWindow("test", cv2.WINDOW_NORMAL)
         cv2.destroyWindow("test")
         GUI_AVAILABLE = True
-        print("✅ OpenCV disponible (mode graphique)")
+        print("OpenCV disponible (mode graphique)")
     except:
         GUI_AVAILABLE = False
-        print("⚠️ Interface graphique OpenCV non disponible (mode console)")
-        
+        print("Interface graphique OpenCV non disponible (mode console)")
+
 except ImportError as e:
-    print(f"⚠️ OpenCV non disponible: {e}")
+    print(f"OpenCV non disponible: {e}")
     print("  Pour l'activer: pip install opencv-python")
     OPENCV_AVAILABLE = False
     GUI_AVAILABLE = False
@@ -42,7 +42,7 @@ FACE_DATA_DIR = Path("face_data")
 try:
     FACE_DATA_DIR.mkdir(exist_ok=True)
 except:
-    print(f"⚠️ Impossible de créer le dossier {FACE_DATA_DIR}")
+    print(f"Impossible de créer le dossier {FACE_DATA_DIR}")
 
 def get_face_hash_from_image(frame):
     """
@@ -65,7 +65,7 @@ def get_face_hash_from_image(frame):
         
         return face_hash
     except Exception as e:
-        print(f"❌ Erreur création hash: {e}")
+        print(f"Erreur création hash: {e}")
         return None
 
 def detect_face(frame):
@@ -94,33 +94,33 @@ def detect_face(frame):
         
         return face_roi
     except Exception as e:
-        print(f"❌ Erreur détection visage: {e}")
+        print(f"Erreur détection visage: {e}")
         return None
 
     """
     Capture un visage depuis la webcam (version avec fallback console)
     """
     if not OPENCV_AVAILABLE:
-        print("❌ OpenCV non disponible")
+        print("OpenCV non disponible")
         return None
-    
+
     try:
         # Initialiser la webcam
         video_capture = cv2.VideoCapture(0)
         if not video_capture.isOpened():
-            print("❌ Impossible d'ouvrir la webcam")
+            print("Impossible d'ouvrir la webcam")
             return None
         
         print("\n" + "="*50)
-        print("🔵 CAPTURE FACIALE - ENSIM")
+        print("CAPTURE FACIALE - ENSIM")
         print("="*50)
-        
+
         if GUI_AVAILABLE:
-            print("📸 Fenêtre de capture va s'ouvrir...")
+            print("Fenêtre de capture va s'ouvrir...")
             print("   [ESPACE] pour capturer")
             print("   [Q] pour annuler")
         else:
-            print("📸 Mode console - regarde la caméra")
+            print("Mode console - regarde la caméra")
             print("   Capture automatique dans 3 secondes...")
             time.sleep(1)
             print("   3...")
@@ -163,55 +163,55 @@ def detect_face(frame):
                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
                 if face_roi is None:
-                    cv2.putText(display_frame, "⚠️ AUCUN VISAGE DETECTE", 
+                    cv2.putText(display_frame, "AUCUN VISAGE DETECTE",
                                (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-                
+
                 cv2.imshow('Capture Visage - ENSIM', display_frame)
                 key = cv2.waitKey(1) & 0xFF
-                
+
                 if key == ord(' '):
                     if face_roi is not None:
                         face_hash = get_face_hash_from_image(face_roi)
                         face_image = face_roi
                         captured = True
-                        print("\n✅ Visage capturé avec succès!")
+                        print("\nVisage capturé avec succès!")
                     else:
-                        print("\n❌ Aucun visage détecté, réessaie")
-                        
+                        print("\nAucun visage détecté, réessaie")
+
                 elif key == ord('q'):
-                    print("\n❌ Capture annulée")
+                    print("\nCapture annulée")
                     break
             
             # Mode console (sans GUI)
             else:
                 console_attempts += 1
-                print(f"\r📸 Tentative {console_attempts}/{max_console_attempts}... ", end="", flush=True)
-                
+                print(f"\rTentative {console_attempts}/{max_console_attempts}... ", end="", flush=True)
+
                 if face_roi is not None:
                     face_hash = get_face_hash_from_image(face_roi)
                     face_image = face_roi
                     captured = True
-                    print("\n✅ Visage capturé avec succès!")
+                    print("\nVisage capturé avec succès!")
                 elif console_attempts >= max_console_attempts:
-                    print("\n❌ Échec capture - aucun visage détecté")
+                    print("\nÉchec capture - aucun visage détecté")
                     break
                 else:
                     time.sleep(0.5)  # Pause entre les tentatives
-        
+
         # Nettoyer
         video_capture.release()
         if GUI_AVAILABLE:
             cv2.destroyAllWindows()
-        
+
         if face_hash:
-            print("✅ Données faciales enregistrées")
+            print("Données faciales enregistrées")
             return {"hash": face_hash, "image": face_image}
-        
-        print("❌ Aucune donnée faciale capturée")
+
+        print("Aucune donnée faciale capturée")
         return None
-        
+
     except Exception as e:
-        print(f"\n❌ Erreur capture: {e}")
+        print(f"\nErreur capture: {e}")
         return None
 def capture_face_from_webcam():
     """

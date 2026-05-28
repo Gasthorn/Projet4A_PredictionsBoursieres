@@ -247,9 +247,9 @@ def _transformer_card(ticker, company, pred, target_href="/mon-suivi"):
     dir_str    = f"{dir_prob*100:.1f}%" if dir_prob is not None else "N/A"
     direction  = "monter" if rec == 'ACHETER' else "baisser"
     tip_body   = (
-        f"Notre Transformer hybride combine {60} jours d'historique de prix et les dernières "
+        f"Notre Transformer hybride combine 60 jours d'historique de prix et les dernières "
         f"actualités financières sur {company}. "
-        f"Il prédit que le cours va {direction} de {abs(return_pct):.3f}% avec une probabilité directionnelle de {dir_str}."
+        f"Il prédit que le cours va {direction} de {abs(return_pct):.3f}% dans les prochains jours."
     ) if return_pct is not None else f"Données insuffisantes pour {company} — le modèle Transformer n'a pas pu produire de signal."
 
     return html.Div(className=f"home-pred-card {_REC_CARD.get(rec, 'home-pred-watch')}", children=[
@@ -282,7 +282,7 @@ def _transformer_card(ticker, company, pred, target_href="/mon-suivi"):
                 html.P(tip_body, className="home-pred-tooltip-body"),
                 html.Div(className="home-pred-tooltip-footer", children=[
                     html.I(className="fas fa-atom"),
-                    html.Span(f" Prob. directionnelle : {dir_str} · {ret_str}"),
+                    html.Span(f" Rendement prédit : {ret_str} · Transformer hybride"),
                 ]),
             ]),
         ]),

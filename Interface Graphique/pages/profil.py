@@ -325,7 +325,7 @@ def load_profil(_init, pathname, session):
         _sec_item(
             "fas fa-camera" if face else "fas fa-camera-slash",
             "Connexion faciale",
-            "Activée ✓" if face else "Non configurée",
+            "Activée" if face else "Non configurée",
             color="#00ff87" if face else None,
         ),
         _sec_item("fas fa-lock", "Mot de passe", "••••••••", note="Modifiable depuis la page de connexion"),

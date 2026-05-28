@@ -531,7 +531,6 @@ def update_news_feed(data, filter_ticker, filter_sentiment):
     items = []
     for _, row in df.iterrows():
         sentiment = row.get('sentiment', 'neutral')
-        score = row.get('score_sentiment', 0)
         ticker = row.get('symbol', '?')
         title = str(row.get('titre', ''))[:200]
         source = str(row.get('source', 'Unknown'))
@@ -571,8 +570,6 @@ def update_news_feed(data, filter_ticker, filter_sentiment):
                         html.Div(title, className="analyse-news-title"),
                         html.Div(className="analyse-news-source-row", children=[
                             html.Span(source, className="analyse-news-source"),
-                            html.Span(" · "),
-                            html.Span(f"Score IA: {score:+.3f}", className="analyse-news-score"),
                         ])
                     ]),
                     html.Div(className="analyse-news-badge-col", children=[

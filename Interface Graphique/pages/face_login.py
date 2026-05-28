@@ -19,7 +19,7 @@ layout = html.Div(className="auth-page login-page", children=[
             
             # Message explicatif
             html.Div(style={"text-align": "center", "margin-bottom": "20px", "color": "var(--accent-2)"}, 
-                    children="📸 Regarde la caméra pour te connecter automatiquement"),
+                    children="Regarde la caméra pour te connecter automatiquement"),
             
             # Zone caméra
             html.Div(className="camera-container", children=[
@@ -30,13 +30,13 @@ layout = html.Div(className="auth-page login-page", children=[
                     
                 ),
                 html.Div(id="face-login-status", className="camera-status no-face", 
-                        children="⏳ Initialisation..."),
+                        children="Initialisation..."),
                 html.Div(className="camera-overlay")  # Guide ovale
             ]),
             
             # Bouton d'annulation
             html.Button(
-                "⬅️ RETOUR", 
+                "RETOUR",
                 id="face-login-back-btn",
                 className="auth-btn",
                 style={"margin-top": "20px", "background": "linear-gradient(135deg, #8be9ff, #00f0ff)"}
@@ -65,7 +65,7 @@ def get_all_users_with_faces():
     cursor.execute("SELECT email, face_image FROM users WHERE face_image IS NOT NULL AND face_image != ''")
     results = cursor.fetchall()
     conn.close()
-    print(f"📊 {len(results)} utilisateurs avec image faciale trouvés")
+    print(f"{len(results)} utilisateurs avec image faciale trouvés")
     for email, img in results:
         print(f"  - {email}: {len(img) if img else 0} caractères")
     return results
@@ -76,15 +76,15 @@ clientside_callback(
     """
     function(n_intervals) {
         if (window.videoStream) {
-            return "📸 Caméra déjà active";
+            return "Caméra déjà active";
         }
-        
+
         var videoElement = document.getElementById('face-login-camera');
         if (videoElement && window.startCamera) {
             window.startCamera('face-login-camera');
-            return "📸 Caméra activée - Recherche de visage...";
+            return "Caméra activée - Recherche de visage...";
         }
-        return "⏳ Initialisation...";
+        return "Initialisation...";
     }
     """,
     Output("face-login-status", "children"),
@@ -123,14 +123,14 @@ def process_face_login(face_data):
         return no_update, no_update, no_update, no_update, no_update, no_update
     
     try:
-        print(f"🔍 Image capturée reçue ({len(face_data)} caractères)")
+        print(f"Image capturée reçue ({len(face_data)} caractères)")
         
         # Récupérer tous les utilisateurs avec images
         users = get_all_users_with_faces()
         
         if len(users) == 0:
             return (no_update, no_update, no_update,
-                   "❌ Aucun visage enregistré", "camera-status no-face",
+                   "Aucun visage enregistré", "camera-status no-face",
                    no_update)
         
         # Chercher le meilleur match
@@ -144,7 +144,7 @@ def process_face_login(face_data):
                 # Comparer les images
                 match, score = compare_faces(face_data, stored_image, threshold=SIMILARITY_THRESHOLD)
                 
-                print(f"📊 Similarité avec {email}: {score:.2%}")
+                print(f"Similarité avec {email}: {score:.2%}")
                 
                 if score > best_score:
                     best_score = score
@@ -152,28 +152,28 @@ def process_face_login(face_data):
                     
                     if match:
                         best_match = email
-                        print(f"  ✅ MATCH TROUVÉ!")
+                        print(f"  MATCH TROUVÉ!")
         
         if best_match or best_score > SIMILARITY_THRESHOLD:
             email_to_use = best_match if best_match else best_email
-            print(f"🎉 Connexion réussie pour {email_to_use} (score: {best_score:.2%})")
+            print(f"Connexion réussie pour {email_to_use} (score: {best_score:.2%})")
             
             return ({"email": email_to_use}, 
-                   f"✅ Bienvenue {email_to_use.split('@')[0]} !", "auth-message success",
-                   f"✅ Visage reconnu ({best_score:.0%})", "camera-status face-detected",
+                   f"Bienvenue {email_to_use.split('@')[0]} !", "auth-message success",
+                   f"Visage reconnu ({best_score:.0%})", "camera-status face-detected",
                    "/")
         else:
-            print(f"❌ Aucun match trouvé (meilleur score: {best_score:.2%})")
+            print(f"Aucun match trouvé (meilleur score: {best_score:.2%})")
             return (no_update, no_update, no_update,
-                   f"❌ Visage non reconnu ({best_score:.0%})", "camera-status no-face",
+                   f"Visage non reconnu ({best_score:.0%})", "camera-status no-face",
                    no_update)
             
     except Exception as e:
-        print(f"❌ Erreur analyse faciale: {e}")
+        print(f"Erreur analyse faciale: {e}")
         import traceback
         traceback.print_exc()
-        return (no_update, f"❌ Erreur: {str(e)}", "auth-message error",
-               "❌ Erreur de scan", "camera-status no-face",
+        return (no_update, f"Erreur: {str(e)}", "auth-message error",
+               "Erreur de scan", "camera-status no-face",
                no_update)
 
 # Callback pour le bouton retour

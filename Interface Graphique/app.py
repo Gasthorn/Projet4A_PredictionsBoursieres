@@ -1,13 +1,27 @@
+import os
+# Doit être défini AVANT tout import de tensorflow/keras/protobuf
+os.environ.setdefault('PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION', 'python')
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
+
 import dash
 from dash import dcc, html, Input, Output, State
 import yfinance as yf
 import pandas as pd
-from flask import jsonify, request as flask_request
+from flask import jsonify, request as flask_request, Response, stream_with_context
 import requests
 from bs4 import BeautifulSoup
 from services.database import init_db
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Charger les variables d'environnement depuis .env (chemin absolu)
+import os as _os
+try:
+    from dotenv import load_dotenv
+    _env_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".env")
+    load_dotenv(dotenv_path=_env_path, override=True)
+except ImportError:
+    pass  # python-dotenv non installé, les env vars système seront utilisées
 
 # Supprimer les logs trop bavards
 logging.getLogger('werkzeug').setLevel(logging.ERROR)
@@ -26,6 +40,9 @@ app = dash.Dash(
 )
 
 app.title = "ENSIM - Predictions Boursieres"
+
+# Désactiver le cache navigateur pour les assets (force rechargement chatbot.js à chaque fois)
+app.server.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 # === TICKERS ===
 TICKERS = {
@@ -91,7 +108,101 @@ app.layout = html.Div([
     html.Div(id="navbar-container"),
     
     # === PAGE CONTENT ===
-    dash.page_container
+    dash.page_container,
+
+    # === CHATBOT WIDGET ===
+    html.Button(
+        html.I(className="fa-solid fa-robot"),
+        id="chatbot-toggle",
+        title="Assistant IA"
+    ),
+    html.Div(
+        id="chatbot-panel",
+        className="chatbot-hidden",
+        children=[
+
+            # ── Header ──────────────────────────────────────────
+            html.Div(id="chatbot-header", children=[
+                html.Div(className="chatbot-header-left", children=[
+                    html.Div(className="chatbot-avatar", children=[
+                        html.I(className="fa-solid fa-robot")
+                    ]),
+                    html.Div(className="chatbot-header-info", children=[
+                        html.Span("Conseiller IA", className="chatbot-header-name"),
+                        html.Div(className="chatbot-header-status", children=[
+                            html.Span(className="chatbot-status-dot"),
+                            html.Span("En ligne"),
+                        ]),
+                    ]),
+                ]),
+                html.Div(className="chatbot-header-actions", children=[
+                    html.Button(
+                        html.I(className="fa-solid fa-clock-rotate-left"),
+                        id="chatbot-history-btn",
+                        title="Historique des conversations"
+                    ),
+                    html.Button(
+                        html.I(className="fa-solid fa-pen-to-square"),
+                        id="chatbot-new-btn",
+                        title="Nouvelle conversation"
+                    ),
+                    html.Button(
+                        html.I(className="fa-solid fa-xmark"),
+                        id="chatbot-close",
+                        title="Fermer"
+                    ),
+                ]),
+            ]),
+
+            # ── Vue Chat (par défaut) ────────────────────────────
+            html.Div(id="chatbot-chat-view", children=[
+                html.Div(id="chatbot-messages", children=[
+                    html.Div(
+                        id="chatbot-welcome",
+                        className="chatbot-msg chatbot-msg-bot",
+                        children=[
+                            html.Div(className="chatbot-bubble", children=[
+                                html.Strong("Bonjour !"),
+                                html.Br(),
+                                "Je suis votre assistant IA. Posez-moi vos questions sur la plateforme, les modèles de prédiction ou les actions disponibles."
+                            ])
+                        ]
+                    )
+                ]),
+                html.Div(id="chatbot-input-row", children=[
+                    html.Button(
+                        html.I(className="fa-solid fa-microphone"),
+                        id="chatbot-mic",
+                        title="Parler"
+                    ),
+                    html.Textarea(
+                        id="chatbot-input",
+                        placeholder="Posez votre question ou parlez…",
+                        rows=1
+                    ),
+                    html.Button(
+                        html.I(className="fa-solid fa-paper-plane"),
+                        id="chatbot-send",
+                        title="Envoyer"
+                    ),
+                ]),
+            ]),
+
+            # ── Vue Historique (cachée par défaut) ───────────────
+            html.Div(id="chatbot-history-view", className="cb-view-hidden", children=[
+                html.Div(id="chatbot-history-header", children=[
+                    html.Span("Conversations", className="cb-hist-title"),
+                    html.Button(
+                        [html.I(className="fa-solid fa-plus"), " Nouvelle"],
+                        id="chatbot-new-btn2",
+                        className="cb-new-btn"
+                    ),
+                ]),
+                html.Div(id="chatbot-history-list"),
+            ]),
+
+        ]
+    ),
 ])
 
 # === LISTE DES PAGES PROTÉGÉES ===
@@ -129,7 +240,7 @@ def update_layout(pathname, session):
         ])
 
         if session and session.get("is_admin"):
-            print(f"👑 Lien admin ajouté pour {session.get('email')}")
+            print(f"[ADMIN] Lien admin ajouté pour {session.get('email')}")
             nav_links.append(dcc.Link("Admin", href="/admin", className=nav_cls("/admin")))
 
         nav_links.append(html.Button("Déconnexion", id="logout-btn", className="nav-link"))
@@ -315,6 +426,334 @@ def api_prices():
             sym, data = future.result()
             results[sym] = data
     return jsonify(results)
+
+
+# === API TRANSCRIPTION VOCALE (Groq Whisper) ===
+@app.server.route('/api/transcribe', methods=['POST'])
+def api_transcribe():
+    from groq import Groq
+
+    audio_file = flask_request.files.get('audio')
+    if not audio_file:
+        return jsonify({'error': 'Aucun fichier audio'}), 400
+
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return jsonify({'error': 'Clé API non configurée'}), 500
+
+    try:
+        client = Groq(api_key=api_key)
+        audio_bytes = audio_file.read()
+        transcription = client.audio.transcriptions.create(
+            file=("audio.webm", audio_bytes),
+            model="whisper-large-v3-turbo",
+            language="fr",
+            response_format="text",
+        )
+        return jsonify({'text': str(transcription).strip()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# === API INVESTISSEMENT CHATBOT ===
+@app.server.route('/api/chat-invest', methods=['POST'])
+def api_chat_invest():
+    from services.database import get_connection
+
+    data    = flask_request.get_json(force=True, silent=True) or {}
+    email   = data.get('email', '').strip()
+    symbol  = data.get('symbol', '').strip().upper()
+    model   = data.get('model', 'sentiment').strip().lower()
+    action  = data.get('action', 'ACHETER').strip().upper()
+    amount  = float(data.get('amount', 0) or 0)
+
+    print(f"[chat-invest] REÇU → email={email!r} symbol={symbol!r} model={model!r} action={action!r} amount={amount}")
+
+    ALLOWED_SYMBOLS = {'AAPL','MSFT','TSLA','NVDA','GOOGL','AMZN','META','BTC-USD'}
+    ALLOWED_MODELS  = {'sentiment','lstm','transformer'}
+
+    if not email or symbol not in ALLOWED_SYMBOLS or model not in ALLOWED_MODELS or amount <= 0:
+        print(f"[chat-invest] VALIDATION ÉCHOUÉE — email={email!r} symbol={symbol!r} model={model!r} amount={amount}")
+        return jsonify({'error': 'Données invalides', 'debug': {'email': email, 'symbol': symbol, 'model': model, 'amount': amount}}), 400
+
+    try:
+        # Prix actuel
+        h = yf.Ticker(symbol).history(period='2d', interval='1d')
+        price = float(h['Close'].iloc[-1]) if not h.empty else 0.0
+
+        # Mapper action → directions compatibles avec Mon Suivi
+        pred_dir   = 'up'   if action == 'ACHETER' else 'down'
+        actual_dir = 'up'   if action == 'ACHETER' else 'down'
+
+        conn = get_connection()
+        conn.execute("""
+            INSERT INTO user_trades
+                (user_email, symbol, entry_price, quantity,
+                 prediction_direction, actual_direction, pnl, pnl_percentage,
+                 model_type, status)
+            VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, 'open')
+        """, (email, symbol, price, amount, pred_dir, actual_dir, model))
+        conn.commit()
+        conn.close()
+
+        print(f"[chat-invest] Trade sauvegardé: {email} | {symbol} | {model} | {action} | {amount}€ à {price}$")
+
+        return jsonify({
+            'success': True,
+            'symbol':  symbol,
+            'price':   round(price, 2),
+            'amount':  amount,
+            'action':  action,
+            'model':   model,
+        })
+    except Exception as e:
+        print(f"[chat-invest] Erreur: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# === API COMPARAISON MODÈLES PAR ACTION ===
+@app.server.route('/api/model-compare', methods=['GET'])
+def api_model_compare():
+    from services.database import get_connection
+
+    email  = flask_request.args.get('email', '').strip()
+    symbol = flask_request.args.get('symbol', '').strip().upper()
+
+    if not email or not symbol:
+        return jsonify({'error': 'Missing params'}), 400
+
+    MODEL_LABELS = {'lstm': 'LSTM', 'transformer': 'Transformer', 'sentiment': 'Actualités'}
+
+    try:
+        conn = get_connection()
+        # Résumé par modèle
+        rows = conn.execute("""
+            SELECT model_type,
+                   COUNT(*) as trades,
+                   SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
+                   COALESCE(SUM(pnl), 0) as total_pnl,
+                   COALESCE(AVG(pnl_percentage), 0) as avg_pct
+            FROM user_trades
+            WHERE user_email = ? AND symbol = ? AND status = 'closed'
+            GROUP BY model_type
+        """, (email, symbol)).fetchall()
+
+        models = {}
+        for model_type, trades, wins, total_pnl, avg_pct in rows:
+            # Derniers trades de ce modèle
+            recent = conn.execute("""
+                SELECT entry_date, prediction_direction, quantity, pnl, pnl_percentage
+                FROM user_trades
+                WHERE user_email = ? AND symbol = ? AND model_type = ? AND status = 'closed'
+                ORDER BY entry_date DESC LIMIT 5
+            """, (email, symbol, model_type)).fetchall()
+
+            models[model_type] = {
+                'label':     MODEL_LABELS.get(model_type, model_type),
+                'trades':    trades,
+                'wins':      wins,
+                'losses':    trades - wins,
+                'win_rate':  round(wins / trades * 100, 1) if trades > 0 else 0.0,
+                'total_pnl': round(total_pnl, 2),
+                'avg_pct':   round(avg_pct, 2),
+                'recent':    [
+                    {
+                        'date':    str(r[0])[:10],
+                        'signal':  r[1],
+                        'amount':  r[2] or 0,
+                        'pnl':     round(r[3] or 0, 2),
+                        'pnl_pct': round(r[4] or 0, 2),
+                    }
+                    for r in recent
+                ],
+            }
+        conn.close()
+
+        best_model = None
+        if models:
+            best_model = max(models.items(), key=lambda x: x[1]['total_pnl'])[0]
+
+        return jsonify({'symbol': symbol, 'models': models, 'best_model': best_model})
+    except Exception as e:
+        print(f"[model-compare] Erreur: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# === API COMPARAISON MODÈLES — SIMULATION BACKTESTS ===
+@app.server.route('/api/backtest-compare', methods=['GET'])
+def api_backtest_compare():
+    symbol = flask_request.args.get('symbol', '').strip().upper()
+    if not symbol:
+        return jsonify({'error': 'Missing symbol'}), 400
+
+    START = 500.0
+    DAYS  = 180
+
+    def _run_lstm():
+        try:
+            from pages.mon_suivi import _run_backtest_lstm
+            return 'lstm', _run_backtest_lstm(symbol, start_amount=START, days=DAYS)
+        except Exception as e:
+            print(f"[backtest-compare] lstm {symbol}: {e}")
+            return 'lstm', None
+
+    def _run_transformer():
+        try:
+            from services.transformer_service import predict_backtest as _bt
+            return 'transformer', _bt(symbol, start_amount=START, days=DAYS)
+        except Exception as e:
+            print(f"[backtest-compare] transformer {symbol}: {e}")
+            return 'transformer', None
+
+    def _run_sentiment():
+        try:
+            from pages.mon_suivi import _run_backtest
+            return 'sentiment', _run_backtest(symbol, start_amount=START, days=DAYS)
+        except Exception as e:
+            print(f"[backtest-compare] sentiment {symbol}: {e}")
+            return 'sentiment', None
+
+    def _ds(arr, n=30):
+        if not arr or len(arr) <= n:
+            return [round(v, 2) for v in arr]
+        step = len(arr) / n
+        pts = [arr[int(i * step)] for i in range(n)] + [arr[-1]]
+        return [round(v, 2) for v in pts]
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        futures = [ex.submit(_run_lstm), ex.submit(_run_transformer), ex.submit(_run_sentiment)]
+        for f in as_completed(futures):
+            key, bt = f.result()
+            if bt:
+                results[key] = {
+                    'label':      {'lstm': 'LSTM', 'transformer': 'Transformer', 'sentiment': 'Actualités'}[key],
+                    'start':      START,
+                    'final':      bt['final_value'],
+                    'return_pct': bt['total_return'],
+                    'bh_final':   round(bt['buy_hold'][-1], 2) if bt.get('buy_hold') else START,
+                    'bh_return':  bt['buy_hold_return'],
+                    'n_trades':   bt['n_trades'],
+                    'wins':       bt['wins'],
+                    'losses':     bt['losses'],
+                    'win_rate':   bt['win_rate'],
+                    'start_date': bt['start_date'],
+                    'series':     _ds(bt.get('portfolio', [])),
+                    'bh_series':  _ds(bt.get('buy_hold', [])),
+                }
+
+    if not results:
+        return jsonify({'error': f'Données insuffisantes pour {symbol}'}), 404
+
+    best = max(results.items(), key=lambda x: x[1]['return_pct'])[0]
+    return jsonify({'symbol': symbol, 'models': results, 'best_model': best, 'start': START})
+
+
+# === API DÉTECTION INVESTISSEMENT (post-streaming, fiable) ===
+@app.server.route('/api/chat-detect-invest', methods=['POST'])
+def api_chat_detect_invest():
+    """
+    Après le streaming, vérifie si la conversation contient un investissement à enregistrer.
+    Retourne {"invest": {...}} ou {"invest": null}.
+    Utilise un prompt dédié à l'extraction JSON — beaucoup plus fiable que le marqueur inline.
+    """
+    import json as _json
+    from groq import Groq
+
+    data       = flask_request.get_json(force=True, silent=True) or {}
+    messages   = data.get('messages', [])[-6:]   # derniers messages seulement
+
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return jsonify({'invest': None})
+
+    EXTRACT_PROMPT = """Tu es un extracteur JSON. Analyse le dernier message de l'utilisateur et extrait les données d'un investissement à enregistrer.
+
+MAPPINGS OBLIGATOIRES — noms d'entreprises → symboles boursiers :
+Apple / AAPL → "AAPL"
+Microsoft / MSFT → "MSFT"
+Tesla / TSLA → "TSLA"
+Nvidia / NVDA → "NVDA"
+Google / Alphabet / GOOGL → "GOOGL"
+Amazon / AMZN → "AMZN"
+Meta / Facebook / META → "META"
+Bitcoin / BTC / crypto → "BTC-USD"
+
+MAPPINGS MODÈLES :
+LSTM / LST / lstm / réseau de neurones / prix → "lstm"
+Transformer / transformeur / hybride → "transformer"
+Sentiment / actualités / actualites / news → "sentiment"
+
+Si l'utilisateur dit qu'il a investi / mis de l'argent / suivi un conseil / acheté / vendu, extrais :
+{"symbol":"AAPL","model":"lstm","action":"ACHETER","amount":500}
+
+RÈGLES :
+- action = "ACHETER" si l'utilisateur a acheté ou suivi un conseil haussier, "VENDRE" sinon
+- amount = le montant en euros (nombre seul, ex: 500)
+- Réponds UNIQUEMENT avec le JSON brut, rien d'autre
+- Si une info manque ou si ce n'est PAS une intention d'enregistrement : réponds null"""
+
+    try:
+        client = Groq(api_key=api_key)
+        resp   = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": EXTRACT_PROMPT}] + messages,
+            max_tokens=80,
+            stream=False,
+            temperature=0,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+        print(f"[detect-invest] raw='{raw}'")
+        if raw == "null" or not raw.startswith("{"):
+            return jsonify({"invest": None})
+        invest = _json.loads(raw)
+        # Validation
+        ALLOWED_SYMBOLS = {"AAPL","MSFT","TSLA","NVDA","GOOGL","AMZN","META","BTC-USD"}
+        ALLOWED_MODELS  = {"sentiment","lstm","transformer"}
+        if (invest.get("symbol") in ALLOWED_SYMBOLS
+                and invest.get("model","").lower() in ALLOWED_MODELS
+                and invest.get("action") in {"ACHETER","VENDRE"}
+                and float(invest.get("amount", 0) or 0) > 0):
+            invest["model"] = invest["model"].lower()
+            return jsonify({"invest": invest})
+        return jsonify({"invest": None})
+    except Exception as e:
+        print(f"[detect-invest] erreur: {e}")
+        return jsonify({"invest": None})
+
+
+# === API CHATBOT (SSE streaming) ===
+@app.server.route('/api/chat', methods=['POST'])
+def api_chat():
+    from services.chat_service import stream_chat
+    import json
+
+    data = flask_request.get_json(force=True, silent=True) or {}
+    messages = data.get('messages', [])
+
+    # Validation basique
+    if not isinstance(messages, list):
+        return jsonify({'error': 'Invalid payload'}), 400
+
+    def generate():
+        try:
+            for chunk in stream_chat(messages):
+                payload = json.dumps({'text': chunk}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
+        except Exception as e:
+            payload = json.dumps({'error': str(e)}, ensure_ascii=False)
+            yield f"data: {payload}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        content_type='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        }
+    )
 
 
 # === LANCEMENT ===

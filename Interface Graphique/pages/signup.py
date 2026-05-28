@@ -117,7 +117,7 @@ layout = html.Div(className="auth-page", style={"paddingTop": "100px"}, children
                         html.Strong("Reconnaissance faciale"),
                         html.Span("Recommandé", className="signup-badge-rec"),
                     ]),
-                    html.P("Connexion instantanée sans mot de passe, 100 % en local",
+                    html.P("Connexion instantanée sans mot de passe",
                            className="signup-face-card-desc"),
                 ]),
                 html.Label(className="signup-face-toggle-wrap", children=[
@@ -431,11 +431,11 @@ def process_face_image(face_data):
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.1, 4)
             if len(faces) > 0:
-                return face_data, "✅ Visage détecté !", "camera-status face-detected"
-            return no_update, "❌ Aucun visage détecté", "camera-status no-face"
+                return face_data, "Visage détecté !", "camera-status face-detected"
+            return no_update, "Aucun visage détecté", "camera-status no-face"
     except Exception as e:
         print(f"Erreur: {e}")
-        return no_update, "❌ Erreur", "camera-status no-face"
+        return no_update, "Erreur", "camera-status no-face"
     return no_update, no_update, no_update
 
 

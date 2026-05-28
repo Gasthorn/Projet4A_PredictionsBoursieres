@@ -189,7 +189,7 @@ def login(n_clicks, email, password, remember):
         return no_update, no_update, no_update, no_update, no_update
 
     if not email or not password:
-        return no_update, "❌ Email et mot de passe requis", "auth-message error", no_update, no_update
+        return no_update, "Email et mot de passe requis", "auth-message error", no_update, no_update
 
     user = verify_user(email, password)
 
@@ -200,9 +200,9 @@ def login(n_clicks, email, password, remember):
             if (remember and "remember" in remember)
             else {}
         )
-        return session_data, "✅ Connexion réussie !", "auth-message success", "/", remember_data
+        return session_data, "Connexion réussie !", "auth-message success", "/", remember_data
 
-    return no_update, "❌ Email ou mot de passe incorrect", "auth-message error", no_update, no_update
+    return no_update, "Email ou mot de passe incorrect", "auth-message error", no_update, no_update
 
 # ── Pré-remplir l'email si redirigé depuis le signup ──
 @callback(

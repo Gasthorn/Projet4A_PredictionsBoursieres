@@ -1,7 +1,13 @@
 import sqlite3
 import bcrypt
+import os
 
-DB_NAME = "users.db"
+# Chemin absolu basé sur __file__ : remonter 3 niveaux depuis services/database.py
+# → toujours <racine_projet>/users.db, peu importe le répertoire de lancement
+_HERE = os.path.dirname(os.path.abspath(__file__))          # .../Interface Graphique/services
+_APP_DIR = os.path.dirname(_HERE)                            # .../Interface Graphique
+_ROOT_DIR = os.path.dirname(_APP_DIR)                        # .../Projet4A_PredictionsBoursieres-main
+DB_NAME = os.path.join(_ROOT_DIR, "users.db")
 
 def get_connection():
     return sqlite3.connect(DB_NAME)
@@ -16,7 +22,7 @@ def init_db():
     table_exists = cursor.fetchone()
     
     if not table_exists:
-        print("🆕 Création de la table users...")
+        print("Création de la table users...")
         cursor.execute("""
         CREATE TABLE users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +37,7 @@ def init_db():
         )
         """)
         conn.commit()
-        print("✅ Table users créée avec succès")
+        print("Table users créée avec succès")
         
         # Créer un admin par défaut
         create_default_admin(conn)
@@ -41,51 +47,51 @@ def init_db():
         columns = [col[1] for col in cursor.fetchall()]
         
         if 'is_admin' not in columns:
-            print("🔄 Migration: ajout de la colonne is_admin...")
+            print("Migration: ajout de la colonne is_admin...")
             cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
             conn.commit()
-            print("✅ Migration is_admin réussie")
-        
+            print("Migration is_admin réussie")
+
         if 'face_image' not in columns:
-            print("🔄 Migration: ajout de la colonne face_image...")
+            print("Migration: ajout de la colonne face_image...")
             cursor.execute("ALTER TABLE users ADD COLUMN face_image TEXT")
             conn.commit()
-            print("✅ Migration face_image réussie")
-        
+            print("Migration face_image réussie")
+
         if 'created_at' not in columns:
-            print("🔄 Migration: ajout de la colonne created_at...")
+            print("Migration: ajout de la colonne created_at...")
             cursor.execute("ALTER TABLE users ADD COLUMN created_at DATETIME")
             conn.commit()
             cursor.execute("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
             conn.commit()
-            print("✅ Migration created_at réussie")
+            print("Migration created_at réussie")
 
         if 'prenom' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN prenom TEXT")
             conn.commit()
-            print("✅ Migration prenom réussie")
+            print("Migration prenom réussie")
 
         if 'nom' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN nom TEXT")
             conn.commit()
-            print("✅ Migration nom réussie")
+            print("Migration nom réussie")
 
         if 'telephone' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN telephone TEXT")
             conn.commit()
-            print("✅ Migration telephone réussie")
+            print("Migration telephone réussie")
 
         if 'public_stats' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN public_stats INTEGER DEFAULT 0")
             conn.commit()
-            print("✅ Migration public_stats réussie")
+            print("Migration public_stats réussie")
 
         if 'is_online' not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN is_online INTEGER DEFAULT 0")
             conn.commit()
-            print("✅ Migration is_online réussie")
+            print("Migration is_online réussie")
 
-        print("📦 Table users déjà existante, conservation des données")
+        print("Table users déjà existante, conservation des données")
         ensure_admin_exists(conn)
 
     # === TABLE USER_TRADES ===
@@ -108,7 +114,7 @@ def init_db():
         FOREIGN KEY (user_email) REFERENCES users(email)
     )
     """)
-    print("✅ Table user_trades vérifiée/créée")
+    print("Table user_trades vérifiée/créée")
 
     # Migration: model_type column (for existing databases)
     cursor.execute("PRAGMA table_info(user_trades)")
@@ -116,7 +122,7 @@ def init_db():
     if 'model_type' not in trade_columns:
         cursor.execute("ALTER TABLE user_trades ADD COLUMN model_type TEXT DEFAULT 'sentiment'")
         conn.commit()
-        print("✅ Migration model_type réussie")
+        print("Migration model_type réussie")
 
     # === TABLE PREDICTIONS_LOG ===
     cursor.execute("""
@@ -134,7 +140,7 @@ def init_db():
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
-    print("✅ Table predictions_log vérifiée/créée")
+    print("Table predictions_log vérifiée/créée")
 
     # === TABLE TESTIMONIALS ===
     cursor.execute("""
@@ -153,11 +159,11 @@ def init_db():
         FOREIGN KEY (user_email) REFERENCES users(email)
     )
     """)
-    print("✅ Table testimonials vérifiée/créée")
+    print("Table testimonials vérifiée/créée")
 
     conn.commit()
     conn.close()
-    print("🎯 Toutes les tables sont initialisées avec succès")
+    print("Toutes les tables sont initialisées avec succès")
 
 def create_default_admin(conn):
     """Crée un admin par défaut"""
@@ -174,12 +180,12 @@ def create_default_admin(conn):
             (default_email, hashed, 1)
         )
         conn.commit()
-        print("👑 Admin par défaut créé: admin@ensim.com / Admin123!")
-        print("⚠️  CHANGE CE MOT DE PASSE DÈS QUE POSSIBLE !")
+        print("Admin par défaut créé: admin@ensim.com / Admin123!")
+        print("CHANGE CE MOT DE PASSE DÈS QUE POSSIBLE !")
     except sqlite3.IntegrityError:
-        print("ℹ️ Admin par défaut déjà existant")
+        print("Admin par défaut déjà existant")
     except Exception as e:
-        print(f"❌ Erreur création admin: {e}")
+        print(f"Erreur création admin: {e}")
 
 def ensure_admin_exists(conn):
     """S'assure qu'il y a au moins un admin"""
@@ -188,7 +194,7 @@ def ensure_admin_exists(conn):
     count = cursor.fetchone()[0]
     
     if count == 0:
-        print("⚠️ Aucun admin trouvé, création d'un admin par défaut...")
+        print("Aucun admin trouvé, création d'un admin par défaut...")
         create_default_admin(conn)
     else:
-        print(f"👥 {count} administrateur(s) trouvé(s)")
+        print(f"{count} administrateur(s) trouvé(s)")
