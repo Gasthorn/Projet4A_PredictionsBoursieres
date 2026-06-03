@@ -136,6 +136,25 @@ layout = html.Div(className="auth-page login-page", children=[
                 dcc.Link("S'inscrire", href="/signup")
             ]),
 
+            html.A(
+                [html.I(className="fas fa-flask", style={"marginRight": "8px"}),
+                 "Voir nos performances sans s'inscrire"],
+                href="/demo",
+                style={
+                    "display": "block",
+                    "textAlign": "center",
+                    "marginTop": "14px",
+                    "fontSize": "0.82rem",
+                    "color": "rgba(0,212,255,0.6)",
+                    "textDecoration": "none",
+                    "padding": "8px",
+                    "borderRadius": "8px",
+                    "border": "1px solid rgba(0,212,255,0.12)",
+                    "background": "rgba(0,212,255,0.04)",
+                    "transition": "all 0.15s",
+                }
+            ),
+
             dcc.Location(id="login-redirect")
         ])
     ])

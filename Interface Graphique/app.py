@@ -99,6 +99,7 @@ app.layout = html.Div([
     # === COMPOSANTS CORE ===
     dcc.Location(id="url", refresh=False),
     dcc.Store(id="session-store", storage_type="session"),
+    dcc.Store(id="demo-seen-store", storage_type="session"),
     dcc.Interval(id="interval-component", interval=5*60*1000, n_intervals=0),
 
     # === TICKER EN HAUT (z-index: 3000) ===
@@ -231,6 +232,9 @@ def update_layout(pathname, session):
         dcc.Link("Témoignages", href="/temoignages", className=nav_cls("/temoignages")),
     ]
 
+    if not is_logged_in:
+        nav_links.append(dcc.Link("Demo", href="/demo", className=nav_cls("/demo")))
+
     if is_logged_in:
         nav_links.extend([
             dcc.Link("Marchés",    href="/actions_page", className=nav_cls("/actions_page")),
@@ -312,16 +316,20 @@ app.clientside_callback(
 # === CALLBACK REDIRECTION PAGES PROTÉGÉES ===
 @app.callback(
     Output("url", "pathname", allow_duplicate=True),
+    Output("demo-seen-store", "data", allow_duplicate=True),
     Input("url", "pathname"),
     State("session-store", "data"),
+    State("demo-seen-store", "data"),
     prevent_initial_call=True
 )
-def redirect_if_not_logged(pathname, session):
-    # Pages qui nécessitent une connexion
+def redirect_if_not_logged(pathname, session, demo_seen):
+    # Pages protégées → login si non connecté
     if pathname in PROTECTED_PAGES and session is None:
-        return "/login"
-    
-    return dash.no_update
+        return "/login", dash.no_update
+    # Première visite sur "/" sans compte → démo (une seule fois par session)
+    if pathname == "/" and session is None and not demo_seen:
+        return "/demo", True
+    return dash.no_update, dash.no_update
 
 # === API OHLCV (yfinance → lightweight-charts) ===
 _ALLOWED = {'AAPL', 'AMZN', 'BTC-USD', 'GOOGL', 'META', 'MSFT', 'NVDA', 'TSLA'}
